@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}{{ summary.run_id }} - ChaosLoop{% endblock %}
+{% block content %}
+{% set m = metrics %}
+{% macro tile(key, label, value, note) %}
+{% set gate = gates.get(key) %}
+<div class="tile {% if gate %}{{ 'ok' if gate.ok else 'miss' }}{% endif %}">
+  <div class="label">{{ label }}</div>
+  <div class="value">{{ value }}</div>
+  <div class="note">{{ note }}</div>
+  {% if gate %}<div class="gate">{% if gate.ok %}&#10003; meets gate{% else %}&#10007; misses gate{% endif %} {{ gate.rule }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+<div class="crumbs"><a href="{{ url_for('index') }}">Runs</a> /</div>
+<h1>{{ summary.run_id }}</h1>
+<div class="meta">
+  {% for split in summary.splits %}<span class="chip split-{{ split }}">{{ split }} split</span>{% endfor %}
+  {% if summary.memory_snapshot %}<span class="chip memory-on">memory <code>{{ summary.memory_snapshot }}</code></span>{% else %}<span class="chip">memory off</span>{% endif %}
+  <span class="chip">model <code>{{ summary.model }}</code></span>
+  <span class="chip">prompt <code>{{ summary.prompt_version }}</code></span>
+  <span class="chip">golden <code>{{ summary.golden_version }}</code></span>
+</div>
+
+{% if m.n_errors %}
+<div class="banner warning"><span class="icon">!</span><span>{{ m.n_errors }} of {{ m.n_runs }} runs never reached the model and are excluded from every metric below.</span></div>
+{% endif %}
+{% if violations is not none %}
+  {% if violations %}
+  <div class="banner error"><span class="icon">&#10007;</span><div>Misses {{ violations | length }} of the gates in <code>golden/thresholds.yaml</code>
+    <ul>{% for v in violations %}<li>{{ v }}</li>{% endfor %}</ul></div></div>
+  {% else %}
+  <div class="banner success"><span class="icon">&#10003;</span><span>Meets every gate in <code>golden/thresholds.yaml</code>.</span></div>
+  {% endif %}
+{% endif %}
+
+<div class="tiles">
+  {{ tile("category", "Category accuracy", (m.category_accuracy if m.n_scored else none) | pct, m.n_scored ~ " graded runs") }}
+  {{ tile("fix", "Fix accuracy", (m.fix_accuracy if m.n_scored else none) | pct, "structural check") }}
+  {{ tile("root_cause", "Root-cause score", m.root_cause_score | num, "LLM judge, 0 to 1") }}
+  {{ tile("false_positive", "False positives", m.false_positive_rate | pct, "on healthy-cluster cases") }}
+  {{ tile("ece", "Calibration error", (m.calibration.system.ece if m.calibration.system else none) | num(3), "ECE of reported confidence") }}
+  {{ tile("cost", "Cost per case", "$" ~ (m.mean_cost_usd | num(3)), (m.mean_latency_s | num(1)) ~ " s mean latency") }}
+</div>
+
+<section class="card">
+  <h2>Reliability diagram</h2>
+  {% if chart %}
+  <p class="muted">Points below the diagonal are overconfident: the agent was right less often than it claimed.</p>
+  {% if series | length > 1 %}
+  <div class="legend" aria-hidden="true">
+    {% for s in series %}
+    <span>
+      <svg width="12" height="12" viewBox="-6 -6 12 12">
+        {% if s.style.shape == "square" %}<rect x="-4.5" y="-4.5" width="9" height="9" rx="1" fill="var({{ s.style.color_var }})"/>
+        {% elif s.style.shape == "diamond" %}<polygon points="0,-6 6,0 0,6 -6,0" fill="var({{ s.style.color_var }})"/>
+        {% else %}<circle r="5" fill="var({{ s.style.color_var }})"/>{% endif %}
+      </svg>{{ s.style.label }}
+    </span>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {{ chart }}
+  <details>
+    <summary>Table view</summary>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Source</th><th>Confidence bin</th><th class="num">Runs</th><th class="num">Mean confidence</th><th class="num">Accuracy</th><th class="num">Gap</th></tr></thead>
+        <tbody>
+          {% for s in series %}{% for b in s.points %}
+          <tr><td>{{ s.style.label }}</td><td>{{ "%.1f" | format(b.lower) }} to {{ "%.1f" | format(b.upper) }}</td><td class="num">{{ b.count }}</td><td class="num">{{ b.mean_confidence | num }}</td><td class="num">{{ b.accuracy | num }}</td><td class="num">{{ b.gap | signed }}</td></tr>
+          {% endfor %}{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% else %}
+  <p class="empty">No confidence recorded in this run.</p>
+  {% endif %}
+</section>
+
+{% if m.calibration %}
+<section class="card">
+  <h2>Calibration by confidence source</h2>
+  <p class="muted">The model's own number is not trusted directly (HLD 7.4): compare it with agreement across resamples, and with that agreement after calibration on dev results.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Source</th><th class="num">Runs</th><th class="num">ECE</th><th class="num">Brier</th><th class="num">Mean gap</th></tr></thead>
+      <tbody>
+        {% for name, c in m.calibration.items() %}
+        <tr><td>{{ name | replace("_", " ") }}</td><td class="num">{{ c.n }}</td><td class="num">{{ c.ece | num(3) }}</td><td class="num">{{ c.brier | num(3) }}</td><td class="num">{{ c.gap | signed }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">A positive gap means overconfident.</p>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Scoreboard by category</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Category</th><th class="num">Cases</th><th class="num">Runs</th><th class="num">Accuracy</th><th class="num">Fix</th><th class="num">Mean confidence</th><th class="num">Calibration gap</th><th class="num">Root cause</th></tr></thead>
+      <tbody>
+        {% for category, stats in m.by_category.items() %}
+        <tr>
+          <td>{{ category }}</td>
+          <td class="num">{{ cases_per_category[category] }}</td>
+          <td class="num">{{ stats.runs | int }}</td>
+          <td class="num">{{ stats.category_accuracy | pct }}</td>
+          <td class="num">{{ stats.fix_accuracy | pct }}</td>
+          <td class="num">{{ stats.mean_confidence | num }}</td>
+          <td class="num">{{ stats.calib_gap | signed }}</td>
+          <td class="num">{{ stats.root_cause_score | num }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Every case run</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Case</th><th class="num">Repeat</th><th>Result</th><th>Expected</th><th>Agent said</th><th>Fix</th><th class="num">Confidence</th><th class="num">Root cause</th><th>Tools</th></tr></thead>
+      <tbody>
+        {% for r in records %}
+        {% set o = outcome(r) %}
+        <tr>
+          <td><a href="{{ url_for('trace_page', run_id=summary.run_id, case_id=r.case_id, repeat=r.repeat) }}">{{ r.case_id }}</a></td>
+          <td class="num">{{ r.repeat }}</td>
+          <td><span class="status {{ o }}">{% if o == "pass" %}&#10003;{% elif o == "fail" %}&#10007;{% elif o == "malformed" %}!{% else %}&ndash;{% endif %} {{ o }}</span></td>
+          <td>{{ r.expected_category.value }}</td>
+          <td>{{ r.agent_category.value if r.agent_category else "-" }}</td>
+          <td>{{ "yes" if r.fix_correct else "no" }}</td>
+          <td class="num">{{ r.confidence | num }}</td>
+          <td class="num">{{ r.root_cause_score | num(1) }}</td>
+          <td class="muted">{{ r.tool_calls | map(attribute="tool") | map("replace", "get_", "") | join(", ") or "-" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='chart.js') }}"></script>{% endblock %}

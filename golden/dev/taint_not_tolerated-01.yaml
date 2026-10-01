@@ -1,0 +1,236 @@
+case_id: taint_not_tolerated-01
+split: dev
+trigger:
+  alertname: PodPendingTooLong
+  service: analytics-worker
+  namespace: chaosloop-lab
+  pod: analytics-worker-78f754fc4f-rf8xr
+  extra: {}
+evidence:
+  get_pod_status:
+    name: analytics-worker-78f754fc4f-rf8xr
+    namespace: chaosloop-lab
+    phase: Pending
+    startTime: null
+    nodeName: null
+    conditions:
+    - type: PodScheduled
+      status: 'False'
+      reason: Unschedulable
+      message: '0/3 nodes are available: 3 node(s) had untolerated taint(s). no new
+        claims to deallocate, preemption: 0/3 nodes are available: 3 Preemption is
+        not helpful for scheduling.'
+    containerStatuses: []
+  get_events:
+  - type: Normal
+    reason: SuccessfulCreate
+    count: 1
+    message: 'Created pod: analytics-worker-78f754fc4f-rf8xr'
+    lastTimestamp: '2026-10-01T21:17:23+00:00'
+    involvedObject: analytics-worker-78f754fc4f
+  - type: Normal
+    reason: ScalingReplicaSet
+    count: 1
+    message: Scaled up replica set analytics-worker-78f754fc4f from 0 to 1
+    lastTimestamp: '2026-10-01T21:17:23+00:00'
+    involvedObject: analytics-worker
+  - type: Warning
+    reason: FailedScheduling
+    count: null
+    message: '0/3 nodes are available: 3 node(s) had untolerated taint(s). no new
+      claims to deallocate, preemption: 0/3 nodes are available: 3 Preemption is not
+      helpful for scheduling.'
+    lastTimestamp: null
+    involvedObject: analytics-worker-78f754fc4f-rf8xr
+  get_logs:
+    current: null
+    previous: null
+  get_deployment_spec:
+    metadata:
+      name: analytics-worker
+      namespace: chaosloop-lab
+      generation: 2
+    spec:
+      replicas: 1
+      progressDeadlineSeconds: 600
+      strategy:
+        type: RollingUpdate
+      selector:
+        matchLabels:
+          app: analytics-worker
+      template:
+        metadata:
+          labels:
+            app: analytics-worker
+        spec:
+          nodeSelector: null
+          tolerations: []
+          imagePullSecrets: []
+          volumes:
+          - name: shm
+            emptyDir:
+              medium: Memory
+          containers:
+          - name: analytics
+            image: localhost:5001/busybox:1.36
+            command:
+            - /bin/sh
+            - -c
+            args:
+            - 'echo "[analytics] allocating ${ALLOC_MB}MB working set"
+
+              dd if=/dev/zero of=/dev/shm/workingset bs=1M count="$ALLOC_MB" 2>/dev/null
+
+              echo "[analytics] steady state"
+
+              while true; do sleep 5; done
+
+              '
+            ports: []
+            env:
+            - name: ALLOC_MB
+              value: '24'
+            envFrom: []
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                memory: 96Mi
+            livenessProbe: null
+            readinessProbe: null
+            volumeMounts:
+            - name: shm
+              mountPath: /dev/shm
+    status:
+      replicas: 2
+      readyReplicas: 1
+      updatedReplicas: 1
+      unavailableReplicas: 1
+      conditions:
+      - type: Available
+        status: 'True'
+        reason: MinimumReplicasAvailable
+        message: Deployment has minimum availability.
+      - type: Progressing
+        status: 'True'
+        reason: ReplicaSetUpdated
+        message: ReplicaSet "analytics-worker-78f754fc4f" is progressing.
+  get_service:
+    metadata:
+      name: analytics-worker
+      namespace: chaosloop-lab
+    spec:
+      type: ClusterIP
+      selector:
+        app: analytics-worker
+      ports:
+      - port: 80
+        targetPort: 8080
+        protocol: TCP
+        name: null
+  get_endpoints:
+    metadata:
+      name: analytics-worker
+      namespace: chaosloop-lab
+    subsets:
+    - addresses:
+      - ip: 10.244.1.27
+      notReadyAddresses: []
+      ports:
+      - port: 8080
+        name: null
+  get_pvc_status: not available
+  get_node_status:
+  - name: chaosloop-control-plane
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-control-plane
+      kubernetes.io/os: linux
+      node-role.kubernetes.io/control-plane: ''
+      node.kubernetes.io/exclude-from-external-load-balancers: ''
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints:
+    - key: node-role.kubernetes.io/control-plane
+      value: null
+      effect: NoSchedule
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.95'
+      memory: 290Mi
+  - name: chaosloop-worker
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints:
+    - key: chaosloop
+      value: experiment
+      effect: NoSchedule
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.13'
+      memory: 98Mi
+  - name: chaosloop-worker2
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker2
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints:
+    - key: chaosloop
+      value: experiment
+      effect: NoSchedule
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.13'
+      memory: 114Mi
+expected:
+  category: taint_not_tolerated
+  root_cause: Both worker nodes carry the taint chaosloop=experiment:NoSchedule and
+    the pod has no matching toleration; the control-plane node is excluded by its
+    usual taint, so no node can run it.
+  fix_check:
+    path: spec.template.spec.tolerations
+    any_of: []
+    must_exist: true
+    equals: null
+metadata:
+  source: chaos
+  k8s_version: '1.30'
+  runtime: containerd
+  recorded: '2026-10-01'

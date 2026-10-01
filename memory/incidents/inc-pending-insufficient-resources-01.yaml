@@ -1,0 +1,20 @@
+incident_id: inc-pending-insufficient-resources-01
+category: insufficient_resources
+symptom: Pending
+summary: PodPendingTooLong on analytics-worker in staging
+signals:
+- '0/3 nodes are available: 3 Insufficient memory. preemption: 0/3 nodes are available:
+  3 No preemption victims found for incoming pod.'
+- 'Error from server (BadRequest): container "analytics" in pod "analytics-worker"
+  is waiting to start: ContainerCreating'
+- 'Unschedulable: 0/3 nodes are available: 3 Insufficient memory. preemption: 0/3
+  nodes are available: 3 No preemption victims found for incoming pod.'
+root_cause: The pod requests 12Gi of memory but no node has that much allocatable
+  - every node tops out near 7.7Gi - so the scheduler cannot place it.
+resolution: Corrected spec.template.spec.containers.resources.requests.memory in the
+  workload manifest.
+provenance:
+  source: golden
+  source_case_id: pending-insufficient-resources-01
+  confirmed_by: claude (pending human review)
+  confirmed_at: '2026-10-01'

@@ -17,6 +17,8 @@ jobs:
       - run: uv sync
       - name: Validate the golden set
         run: uv run chaosloop-eval validate
+      - name: Memory holds no test-split case
+        run: uv run chaosloop-memory check
       - name: Unit and harness tests
         run: uv run pytest
       - name: Lint

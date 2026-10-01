@@ -1,0 +1,17 @@
+incident_id: inc-imagepull-no-fault-transient-01
+category: no_fault
+symptom: SteadyState
+summary: PodImagePullBackOff on cart-service in prod
+signals:
+- 'Failed to pull image "registry.internal:5000/cart:v4.0.7": rpc error: code = Unknown
+  desc = failed to copy: read tcp 172.18.0.3:47122->172.18.0.5:5000: read: connection
+  reset by peer'
+root_cause: A single pull attempt was reset by the registry and the retry succeeded.
+  The pod is Running and Ready, all three replicas are available, and the alert had
+  already resolved.
+resolution: No change made; the condition had already cleared on its own.
+provenance:
+  source: golden
+  source_case_id: imagepull-no-fault-transient-01
+  confirmed_by: claude (pending human review)
+  confirmed_at: '2026-10-01'

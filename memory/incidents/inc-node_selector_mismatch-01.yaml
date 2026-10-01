@@ -1,0 +1,17 @@
+incident_id: inc-node_selector_mismatch-01
+category: node_selector_mismatch
+symptom: Pending
+summary: PodPendingTooLong on analytics-worker in chaosloop-lab
+signals:
+- '...des are available: 1 node(s) had untolerated taint(s), 2 node(s) didn''t match
+  Pod''s node affinity/selector. no new claims to deallocate, preemption: 0/3 nodes
+  are available: 3 Preemption is not helpful for scheduling.'
+root_cause: The pod spec requires nodeSelector accelerator=nvidia-t4, but no node
+  in the cluster carries that label, so the scheduler rejects it on affinity rather
+  than on capacity.
+resolution: Corrected spec.template.spec.nodeSelector in the workload manifest.
+provenance:
+  source: golden
+  source_case_id: node_selector_mismatch-01
+  confirmed_by: claude (pending human review)
+  confirmed_at: '2026-10-01'

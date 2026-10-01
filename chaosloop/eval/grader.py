@@ -33,17 +33,27 @@ def grade_false_positive(expected: Category, actual: Category | None) -> bool:
 
 def grade_fix(diagnosis: Diagnosis | None, fix_check: FixCheck) -> bool:
     patch = diagnosis.fix.patch if diagnosis else ""
-    found, value = find_path(patch, fix_check.path)
+    hits = [find_path(patch, path) for path in fix_check.paths]
+    found = [value for hit, value in hits if hit]
     if not fix_check.must_exist:
         return not found
     if not found:
         return False
     if fix_check.equals is not None:
-        return value == fix_check.equals
+        return any(value == fix_check.equals for value in found)
     return True
 
 
-def grade_case(diagnosis: Diagnosis | None, expected: Expected) -> GradeResult:
+def grade_case(
+    diagnosis: Diagnosis | None, expected: Expected, budget_exhausted: bool = False
+) -> GradeResult:
+    if budget_exhausted:
+        # Running out of budget returns `unknown` so production escalates to a human, but the
+        # agent did not choose to abstain - the harness gave up. Crediting it would score every
+        # investigation that loops until the budget ends as a correct answer on `unknown` cases.
+        return GradeResult(
+            category_correct=False, fix_correct=False, is_false_positive=False, malformed=False
+        )
     actual = diagnosis.category if diagnosis else None
     return GradeResult(
         category_correct=grade_category(expected.category, actual),
@@ -76,17 +86,13 @@ def find_path(patch: str, path: str) -> tuple[bool, Any]:
     target = _normalize(path)
     if _is_json_patch(parsed):
         for operation in parsed:
-            if _normalize(operation["path"]).endswith(target):
+            if _touches(_normalize(operation["path"]), target):
                 return True, operation.get("value")
         return False, None
 
     if isinstance(parsed, (dict, list)):
         for candidate, value in _flatten(parsed).items():
-            if (
-                candidate == target
-                or candidate.endswith(f".{target}")
-                or target.endswith(f".{candidate}")
-            ):
+            if _touches(candidate, target):
                 return True, value
         return False, None
 
@@ -97,6 +103,20 @@ def find_path(patch: str, path: str) -> tuple[bool, Any]:
 
 
 _INDEX = re.compile(r"\[\s*\d+\s*\]")
+
+
+def _touches(candidate: str, target: str) -> bool:
+    """Does a patch at `candidate` change the field at `target`?
+
+    True when the candidate is the target or anything beneath it (a patch to
+    `...volumes.persistentVolumeClaim.claimName` changes `...volumes`), or when it is the
+    target written without its leading path (`imagePullSecrets: [...]`).
+    """
+    found, wanted = candidate.split("."), target.split(".")
+    span = len(wanted)
+    if any(found[i : i + span] == wanted for i in range(len(found) - span + 1)):
+        return True
+    return len(found) < span and wanted[-len(found) :] == found
 
 
 def _is_json_patch(parsed: Any) -> bool:

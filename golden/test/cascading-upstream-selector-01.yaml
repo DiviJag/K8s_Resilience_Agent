@@ -1,0 +1,154 @@
+case_id: cascading-upstream-selector-01
+split: test
+trigger:
+  alertname: PodCrashLooping
+  service: payment-api
+  namespace: prod
+  pod: payment-api-5d8f7c9b62-qx4lm
+evidence:
+  get_pod_status:
+    by_name:
+      payment-api-5d8f7c9b62-qx4lm:
+        name: payment-api-5d8f7c9b62-qx4lm
+        namespace: prod
+        phase: Running
+        startTime: "2026-09-30T09:40:03Z"
+        containerStatuses:
+          - name: payment
+            ready: false
+            restartCount: 6
+            image: "registry.internal:5000/payment-api:v4.2.1"
+            state:
+              waiting:
+                reason: CrashLoopBackOff
+                message: "back-off 2m40s restarting failed container=payment pod=payment-api-5d8f7c9b62-qx4lm_prod"
+            lastState:
+              terminated:
+                exitCode: 1
+                reason: Error
+                startedAt: "2026-09-30T09:51:12Z"
+                finishedAt: "2026-09-30T09:51:38Z"
+  get_events:
+    by_name:
+      payment-api:
+        - type: Normal
+          reason: Started
+          count: 7
+          message: "Started container payment"
+        - type: Warning
+          reason: BackOff
+          count: 19
+          message: "Back-off restarting failed container payment in pod payment-api-5d8f7c9b62-qx4lm_prod"
+      orders-db:
+        - type: Normal
+          reason: ScalingReplicaSet
+          count: 1
+          message: "Scaled up replica set orders-db-6c8b7d5f94 to 1"
+        - type: Normal
+          reason: Started
+          count: 1
+          message: "Started container postgres"
+  get_logs:
+    by_name:
+      payment-api-5d8f7c9b62-qx4lm:
+        current: ""
+        previous: |
+          2026-09-30T09:51:12Z INFO  payment-api v4.2.1 starting
+          2026-09-30T09:51:12Z INFO  connecting to orders-db.prod.svc.cluster.local:5432
+          2026-09-30T09:51:17Z WARN  db connect attempt 1/5 failed: dial tcp 10.96.142.7:5432: connect: connection refused
+          2026-09-30T09:51:22Z WARN  db connect attempt 2/5 failed: dial tcp 10.96.142.7:5432: connect: connection refused
+          2026-09-30T09:51:38Z WARN  db connect attempt 5/5 failed: dial tcp 10.96.142.7:5432: connect: connection refused
+          2026-09-30T09:51:38Z FATAL database unavailable after 5 attempts, exiting
+  get_deployment_spec:
+    by_name:
+      payment-api:
+        metadata: {name: payment-api, namespace: prod, generation: 15}
+        spec:
+          replicas: 2
+          selector:
+            matchLabels: {app: payment-api}
+          template:
+            metadata:
+              labels: {app: payment-api}
+            spec:
+              imagePullSecrets: [{name: regcred}]
+              containers:
+                - name: payment
+                  image: "registry.internal:5000/payment-api:v4.2.1"
+                  ports: [{containerPort: 8080}]
+                  env:
+                    - {name: DB_HOST, value: orders-db.prod.svc.cluster.local}
+                    - {name: DB_PORT, value: "5432"}
+                    - name: DB_PASSWORD
+                      valueFrom:
+                        secretKeyRef: {name: orders-db-credentials, key: password}
+                  resources:
+                    requests: {cpu: 200m, memory: 256Mi}
+                    limits: {memory: 512Mi}
+        status:
+          replicas: 2
+          readyReplicas: 0
+          unavailableReplicas: 2
+      orders-db:
+        metadata: {name: orders-db, namespace: prod, generation: 9}
+        spec:
+          replicas: 1
+          selector:
+            matchLabels: {app: orders-db}
+          template:
+            metadata:
+              labels: {app: orders-db, tier: database}
+            spec:
+              containers:
+                - name: postgres
+                  image: "postgres:16.4"
+                  ports: [{containerPort: 5432}]
+                  readinessProbe:
+                    exec: {command: [pg_isready, -U, orders]}
+                    periodSeconds: 5
+        status:
+          replicas: 1
+          readyReplicas: 1
+          unavailableReplicas: 0
+  get_service:
+    by_name:
+      payment-api:
+        metadata: {name: payment-api, namespace: prod}
+        spec:
+          selector: {app: payment-api}
+          ports: [{port: 80, targetPort: 8080, protocol: TCP}]
+      orders-db:
+        metadata: {name: orders-db, namespace: prod}
+        spec:
+          type: ClusterIP
+          selector: {app: orders-db-primary}
+          ports: [{port: 5432, targetPort: 5432, protocol: TCP}]
+  get_endpoints:
+    by_name:
+      payment-api:
+        metadata: {name: payment-api, namespace: prod}
+        subsets:
+          - notReadyAddresses: [{ip: 10.244.1.40}, {ip: 10.244.2.33}]
+            ports: [{port: 8080}]
+      orders-db:
+        metadata: {name: orders-db, namespace: prod}
+        subsets: []
+  get_pvc_status: not available
+  get_node_status:
+    - name: kind-worker
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+expected:
+  category: selector_mismatch
+  root_cause: "payment-api is healthy itself; it crashes because its database Service, orders-db, selects app=orders-db-primary while the postgres pods are labelled app=orders-db, so the Service has no endpoints and every connection is refused."
+  fix_check:
+    path: spec.selector
+    any_of: [spec.template.metadata.labels]
+    must_exist: true
+metadata:
+  source: manual
+  k8s_version: "1.30"
+  runtime: containerd
+  recorded: 2026-10-01
+  note: "Cascading failure (HLD §12): graded on naming the upstream cause, not the crash-looping service."

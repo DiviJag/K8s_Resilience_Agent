@@ -1,0 +1,167 @@
+case_id: target_port_mismatch-01
+split: test
+trigger:
+  alertname: ServiceProbeFailed
+  service: reporting-service
+  namespace: chaosloop-lab
+  pod: reporting-service-8d5fc547-2r44w
+  extra: {}
+evidence:
+  get_pod_status:
+    name: reporting-service-8d5fc547-2r44w
+    namespace: chaosloop-lab
+    phase: Running
+    startTime: '2026-10-01T21:31:17+00:00'
+    nodeName: chaosloop-worker
+    conditions:
+    - type: PodReadyToStartContainers
+      status: 'True'
+      reason: null
+      message: null
+    - type: Initialized
+      status: 'True'
+      reason: null
+      message: null
+    - type: Ready
+      status: 'True'
+      reason: null
+      message: null
+    - type: ContainersReady
+      status: 'True'
+      reason: null
+      message: null
+    - type: PodScheduled
+      status: 'True'
+      reason: null
+      message: null
+    containerStatuses:
+    - name: reporting
+      ready: true
+      restartCount: 0
+      image: localhost:5001/busybox:1.36
+      state:
+        running:
+          startedAt: '2026-10-01T21:31:17+00:00'
+      lastState: null
+  get_events: []
+  get_logs:
+    current: '[reporting] mounting /data
+
+      [reporting] listening on :8080
+
+      '
+    previous: 'error: previous terminated container "reporting" in pod "reporting-service-8d5fc547-2r44w"
+      not found'
+  get_deployment_spec: 'error: ''V1Probe'' object has no attribute ''exec'''
+  get_service:
+    metadata:
+      name: reporting-service
+      namespace: chaosloop-lab
+    spec:
+      type: ClusterIP
+      selector:
+        app: reporting-service
+      ports:
+      - port: 80
+        targetPort: 9999
+        protocol: TCP
+        name: null
+  get_endpoints:
+    metadata:
+      name: reporting-service
+      namespace: chaosloop-lab
+    subsets:
+    - addresses:
+      - ip: 10.244.2.63
+      notReadyAddresses: []
+      ports:
+      - port: 9999
+        name: null
+  get_pvc_status: not available
+  get_node_status:
+  - name: chaosloop-control-plane
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-control-plane
+      kubernetes.io/os: linux
+      node-role.kubernetes.io/control-plane: ''
+      node.kubernetes.io/exclude-from-external-load-balancers: ''
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints:
+    - key: node-role.kubernetes.io/control-plane
+      value: null
+      effect: NoSchedule
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.95'
+      memory: 290Mi
+  - name: chaosloop-worker
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints: []
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.13'
+      memory: 98Mi
+  - name: chaosloop-worker2
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker2
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints: []
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.13'
+      memory: 114Mi
+expected:
+  category: target_port_mismatch
+  root_cause: The reporting-service Service sends traffic to targetPort 9999, but
+    the container listens on 8080, so connections are refused even though the pod
+    is healthy.
+  fix_check:
+    path: spec.ports.targetPort
+    any_of: []
+    must_exist: true
+    equals: null
+metadata:
+  source: chaos
+  k8s_version: '1.30'
+  runtime: containerd
+  recorded: '2026-10-01'

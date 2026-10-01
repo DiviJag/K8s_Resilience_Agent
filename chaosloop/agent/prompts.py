@@ -86,6 +86,23 @@ Field notes:
 """
 
 
+# Appended rather than woven in, so the no-memory prompt stays byte-identical to v2 and runs
+# with and without memory differ only by this paragraph - which is what memory lift measures.
+MEMORY_GUIDANCE = """
+You can also call search_memory: confirmed past incidents from this platform, and runbooks. \
+Use it once you hold concrete error text, and query with that text rather than the alert name.
+
+A past incident is a precedent, not a verdict. Different causes produce the same symptom, so \
+adopt a precedent's category only when this cluster's own evidence shows the same \
+distinguishing signal. Never cite memory as evidence: the evidence field must quote this \
+investigation's tool output.
+"""
+
+
+def system_prompt(memory_enabled: bool = False) -> str:
+    return SYSTEM_PROMPT + MEMORY_GUIDANCE if memory_enabled else SYSTEM_PROMPT
+
+
 def render_user_message(trigger: Trigger) -> str:
     return (
         "An alert fired. Investigate it and report the root cause.\n\n"

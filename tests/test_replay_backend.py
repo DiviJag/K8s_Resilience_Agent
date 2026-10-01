@@ -9,6 +9,7 @@ from chaosloop.tools.interface import (
     ToolBackend,
     UnknownToolError,
     dispatch,
+    owned_by,
 )
 from chaosloop.tools.replay_backend import ReplayBackend
 
@@ -56,6 +57,59 @@ def test_get_logs_passes_through_recorded_pair():
 def test_replay_backend_redacts_unredacted_evidence():
     backend = ReplayBackend({"get_logs": {"current": "token=hunter2secret", "previous": None}})
     assert "hunter2secret" not in backend.get_logs("prod", "p")["current"]
+
+
+MULTI_OBJECT = {
+    "get_service": {
+        "by_name": {
+            "payment": {"spec": {"selector": {"app": "payment"}}},
+            "orders-db": {"spec": {"selector": {"app": "orders-db-v2"}}},
+        }
+    },
+    "get_events": {
+        "by_name": {
+            "payment": [{"message": "Back-off restarting failed container"}],
+            "orders-db": [{"message": "Scaled up replica set orders-db-7f9"}],
+        }
+    },
+    "get_logs": {"by_name": {"payment-7d9f8c6b54-2xkzq": {"current": "", "previous": "refused"}}},
+}
+
+
+def test_by_name_evidence_answers_per_object():
+    backend = ReplayBackend(MULTI_OBJECT)
+    assert backend.get_service("prod", "orders-db")["spec"]["selector"] == {"app": "orders-db-v2"}
+    assert backend.get_service("prod", "payment")["spec"]["selector"] == {"app": "payment"}
+    assert backend.get_service("prod", "inventory") == NOT_AVAILABLE
+
+
+def test_by_name_events_follow_ownership():
+    backend = ReplayBackend(MULTI_OBJECT)
+    pod_events = backend.get_events("prod", "payment-7d9f8c6b54-2xkzq")
+    assert pod_events == [{"message": "Back-off restarting failed container"}]
+    assert len(backend.get_events("prod")) == 2
+    assert backend.get_events("prod", "unrelated") == NOT_AVAILABLE
+
+
+def test_by_name_logs_match_a_deployment_to_its_pod():
+    backend = ReplayBackend(MULTI_OBJECT)
+    assert backend.get_logs("prod", "payment-7d9f8c6b54-2xkzq")["previous"] == "refused"
+    assert backend.get_logs("prod", "payment")["previous"] == "refused"
+
+
+@pytest.mark.parametrize(
+    "name, owner, expected",
+    [
+        ("cart-service", "cart-service", True),
+        ("cart-service-6d4f8797f6", "cart-service", True),
+        ("cart-service-6d4f8797f6-2lcfw", "cart-service", True),
+        ("orders-db-0", "orders-db", True),
+        ("cart-service-6d4f8797f6-2lcfw", "cart", False),
+        ("cartographer-6d4f8797f6", "cart", False),
+    ],
+)
+def test_ownership_requires_a_controller_suffix(name: str, owner: str, expected: bool):
+    assert owned_by(name, owner) is expected
 
 
 def test_dispatch_routes_and_rejects_unknown_tools():

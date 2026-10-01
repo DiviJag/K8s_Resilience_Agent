@@ -10,7 +10,7 @@ import os
 import re
 from typing import Any
 
-from chaosloop.tools.interface import NOT_AVAILABLE, ToolBackend
+from chaosloop.tools.interface import NOT_AVAILABLE, ToolBackend, owned_by
 from chaosloop.tools.redact import redact
 
 MAX_LOG_CHARS = 8_000
@@ -30,13 +30,8 @@ class LiveBackend(ToolBackend):
             self._exception: type[Exception] = Exception
             return
 
-        try:
-            from kubernetes import client, config
-            from kubernetes.client.exceptions import ApiException
-        except ImportError as exc:  # pragma: no cover - exercised only without the extra
-            raise RuntimeError(
-                "LiveBackend needs the kubernetes client: uv sync --extra live"
-            ) from exc
+        from kubernetes import client, config
+        from kubernetes.client.exceptions import ApiException
 
         # Resolved explicitly: an empty KUBECONFIG (easy to get from a .env) is read by the
         # client as a literal empty path rather than as "unset", and fails to find any config.
@@ -88,13 +83,19 @@ class LiveBackend(ToolBackend):
         )
 
     def get_events(self, namespace: str, object_name: str | None = None) -> Any:
-        selector = f"involvedObject.name={object_name}" if object_name else None
-        result = self._guard(
-            self._core.list_namespaced_event, namespace=namespace, field_selector=selector
-        )
+        result = self._guard(self._core.list_namespaced_event, namespace=namespace)
         if isinstance(result, str):
             return result
-        events = sorted(result.items, key=lambda e: e.last_timestamp or e.event_time or 0)
+        # Matched by ownership prefix rather than exact name: a deployment's ReplicaSets and pods
+        # are named "<deployment>-<hash>", and some failures live only on those - an exhausted
+        # quota leaves no pod at all, just a FailedCreate event on the ReplicaSet.
+        items = [
+            e
+            for e in result.items
+            if object_name is None
+            or owned_by(getattr(e.involved_object, "name", "") or "", object_name)
+        ]
+        events = sorted(items, key=lambda e: e.last_timestamp or e.event_time or 0)
         return redact(
             [
                 {
@@ -127,7 +128,12 @@ class LiveBackend(ToolBackend):
         )
         if result is None or result == NOT_AVAILABLE:
             return None
-        text = str(result)
+        # The client can hand back raw bytes. str() on those yields the Python repr -
+        # "b'line one\\nline two'" - which flattens a multi-line log into one garbled line.
+        if isinstance(result, bytes):
+            text = result.decode("utf-8", errors="replace")
+        else:
+            text = str(result)
         if len(text) > MAX_LOG_CHARS:
             text = f"...[truncated]\n{text[-MAX_LOG_CHARS:]}"
         return text

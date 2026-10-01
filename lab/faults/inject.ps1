@@ -36,13 +36,15 @@ param(
     [string]$Namespace = "chaosloop-lab"
 )
 
-$ErrorActionPreference = "Stop"
+# 'Continue' with exit codes checked explicitly - see scripts/lab-up.ps1 for why 'Stop' breaks
+# whenever the caller redirects a native tool's stderr.
+$ErrorActionPreference = "Continue"
 $context = "kind-$ClusterName"
 
 function Invoke-K {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
-    & kubectl --context $context -n $Namespace @Args
-    if ($LASTEXITCODE -ne 0) { throw "kubectl $($Args -join ' ') failed ($LASTEXITCODE)" }
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$KubectlArgs)
+    & kubectl --context $context -n $Namespace @KubectlArgs
+    if ($LASTEXITCODE -ne 0) { throw "kubectl $($KubectlArgs -join ' ') failed ($LASTEXITCODE)" }
 }
 
 function Invoke-JsonPatch {
@@ -100,8 +102,12 @@ switch ($Category) {
             '[{"op":"replace","path":"/spec/template/spec/containers/0/env/0/value","value":"256"}]'
     }
     "insufficient_resources" {
+        # The limit is raised with the request: the API rejects a request above its limit, so
+        # patching the request alone never reaches the scheduler at all.
         Invoke-JsonPatch -Target "deployment/analytics-worker" -Patch `
             ('[{"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/memory"' +
+            ',"value":"64Gi"},' +
+            '{"op":"replace","path":"/spec/template/spec/containers/0/resources/limits/memory"' +
             ',"value":"64Gi"}]')
     }
     "node_selector_mismatch" {
@@ -112,6 +118,7 @@ switch ($Category) {
         foreach ($node in (& kind get nodes --name $ClusterName)) {
             if ($node -like "*worker*") {
                 & kubectl --context $context taint nodes $node chaosloop=experiment:NoSchedule --overwrite
+                if ($LASTEXITCODE -ne 0) { throw "failed to taint $node" }
             }
         }
         Invoke-K rollout restart deployment/analytics-worker

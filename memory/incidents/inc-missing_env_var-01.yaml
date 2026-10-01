@@ -1,0 +1,20 @@
+incident_id: inc-missing_env_var-01
+category: missing_env_var
+symptom: CrashLoopBackOff
+summary: PodCrashLooping on billing-service in chaosloop-lab
+signals:
+- Back-off restarting failed container billing in pod billing-service-6c4df46bf8-g9g49_chaosloop-lab(15c5c483-9b0d-4fe8-8f51-0dbcfb1c8ae0)
+- Back-off restarting failed container billing in pod billing-service-6c4df46bf8-nvbls_chaosloop-lab(3c318319-535f-4cf5-b547-522e09ec92ea)
+- unable to retrieve container logs for containerd://ffbc51daf87f42319582c30d285c83e49aec242c9b740ffb37204f30090e4226
+- '[billing] FATAL config: required environment variable DATABASE_URL is not set'
+- terminated Error exitCode=1
+- 'ContainersNotReady: containers with unready status: [billing]'
+root_cause: The billing container exits at startup because DATABASE_URL is required
+  and the pod spec no longer sets it, and the billing-config ConfigMap does not supply
+  it either.
+resolution: Corrected spec.template.spec.containers.env in the workload manifest.
+provenance:
+  source: golden
+  source_case_id: missing_env_var-01
+  confirmed_by: claude (pending human review)
+  confirmed_at: '2026-10-01'

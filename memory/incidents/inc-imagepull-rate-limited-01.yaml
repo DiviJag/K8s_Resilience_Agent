@@ -1,0 +1,19 @@
+incident_id: inc-imagepull-rate-limited-01
+category: registry_rate_limited
+symptom: ImagePullBackOff
+summary: PodImagePullBackOff on notification-service in prod
+signals:
+- '...pected status code 429 Too Many Requests - Server message: toomanyrequests:
+  You have reached your pull rate limit. You may increase the limit by authenticating
+  and upgrading: https://www.docker.com/increase-rate-limit'
+- 'Error from server (BadRequest): container "redis" in pod "notification-service"
+  is waiting to start: trying and failing to pull image'
+- 'ImagePullBackOff: Back-off pulling image "docker.io/library/redis:7.2"'
+root_cause: Anonymous pulls from Docker Hub have hit the shared per-IP rate limit;
+  the registry returns 429 toomanyrequests. The image reference itself is valid.
+resolution: Corrected spec.template.spec.imagePullSecrets in the workload manifest.
+provenance:
+  source: golden
+  source_case_id: imagepull-rate-limited-01
+  confirmed_by: claude (pending human review)
+  confirmed_at: '2026-10-01'

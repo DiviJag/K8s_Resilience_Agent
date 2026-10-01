@@ -1,0 +1,318 @@
+case_id: quota_exceeded-01
+split: test
+trigger:
+  alertname: DeploymentReplicasMismatch
+  service: cart-service
+  namespace: chaosloop-lab
+  pod: cart-service-6d4f8797f6-rs25z
+  extra: {}
+evidence:
+  get_pod_status:
+    name: cart-service-6d4f8797f6-rs25z
+    namespace: chaosloop-lab
+    phase: Running
+    startTime: '2026-10-01T21:30:35+00:00'
+    nodeName: chaosloop-worker
+    conditions:
+    - type: PodReadyToStartContainers
+      status: 'True'
+      reason: null
+      message: null
+    - type: Initialized
+      status: 'True'
+      reason: null
+      message: null
+    - type: Ready
+      status: 'True'
+      reason: null
+      message: null
+    - type: ContainersReady
+      status: 'True'
+      reason: null
+      message: null
+    - type: PodScheduled
+      status: 'True'
+      reason: null
+      message: null
+    containerStatuses:
+    - name: cart
+      ready: true
+      restartCount: 0
+      image: localhost:5001/busybox:1.36
+      state:
+        running:
+          startedAt: '2026-10-01T21:30:36+00:00'
+      lastState: null
+  get_events:
+  - type: Warning
+    reason: FailedCreate
+    count: 1
+    message: 'Error creating: pods "cart-service-6d4f8797f6-wlsqp" is forbidden: exceeded
+      quota: chaosloop-experiment-quota, requested: pods=1, used: pods=12, limited:
+      pods=4'
+    lastTimestamp: '2026-10-01T21:30:49+00:00'
+    involvedObject: cart-service-6d4f8797f6
+  - type: Warning
+    reason: FailedCreate
+    count: 1
+    message: 'Error creating: pods "cart-service-6d4f8797f6-zddcw" is forbidden: exceeded
+      quota: chaosloop-experiment-quota, requested: pods=1, used: pods=12, limited:
+      pods=4'
+    lastTimestamp: '2026-10-01T21:30:49+00:00'
+    involvedObject: cart-service-6d4f8797f6
+  - type: Warning
+    reason: FailedCreate
+    count: 1
+    message: 'Error creating: pods "cart-service-6d4f8797f6-t4tqj" is forbidden: exceeded
+      quota: chaosloop-experiment-quota, requested: pods=1, used: pods=12, limited:
+      pods=4'
+    lastTimestamp: '2026-10-01T21:30:49+00:00'
+    involvedObject: cart-service-6d4f8797f6
+  - type: Warning
+    reason: FailedCreate
+    count: 1
+    message: 'Error creating: pods "cart-service-6d4f8797f6-qxft6" is forbidden: exceeded
+      quota: chaosloop-experiment-quota, requested: pods=1, used: pods=12, limited:
+      pods=4'
+    lastTimestamp: '2026-10-01T21:30:49+00:00'
+    involvedObject: cart-service-6d4f8797f6
+  - type: Warning
+    reason: FailedCreate
+    count: 1
+    message: 'Error creating: pods "cart-service-6d4f8797f6-gq79l" is forbidden: exceeded
+      quota: chaosloop-experiment-quota, requested: pods=1, used: pods=12, limited:
+      pods=4'
+    lastTimestamp: '2026-10-01T21:30:49+00:00'
+    involvedObject: cart-service-6d4f8797f6
+  - type: Warning
+    reason: FailedCreate
+    count: 1
+    message: 'Error creating: pods "cart-service-6d4f8797f6-994b2" is forbidden: exceeded
+      quota: chaosloop-experiment-quota, requested: pods=1, used: pods=12, limited:
+      pods=4'
+    lastTimestamp: '2026-10-01T21:30:49+00:00'
+    involvedObject: cart-service-6d4f8797f6
+  - type: Warning
+    reason: FailedCreate
+    count: 1
+    message: 'Error creating: pods "cart-service-6d4f8797f6-sc7qw" is forbidden: exceeded
+      quota: chaosloop-experiment-quota, requested: pods=1, used: pods=12, limited:
+      pods=4'
+    lastTimestamp: '2026-10-01T21:30:49+00:00'
+    involvedObject: cart-service-6d4f8797f6
+  - type: Normal
+    reason: ScalingReplicaSet
+    count: 1
+    message: Scaled up replica set cart-service-6d4f8797f6 from 2 to 6
+    lastTimestamp: '2026-10-01T21:30:49+00:00'
+    involvedObject: cart-service
+  - type: Warning
+    reason: FailedCreate
+    count: 1
+    message: 'Error creating: pods "cart-service-6d4f8797f6-hh7fb" is forbidden: exceeded
+      quota: chaosloop-experiment-quota, requested: pods=1, used: pods=12, limited:
+      pods=4'
+    lastTimestamp: '2026-10-01T21:30:50+00:00'
+    involvedObject: cart-service-6d4f8797f6
+  - type: Warning
+    reason: FailedCreate
+    count: 1
+    message: 'Error creating: pods "cart-service-6d4f8797f6-kh862" is forbidden: exceeded
+      quota: chaosloop-experiment-quota, requested: pods=1, used: pods=12, limited:
+      pods=4'
+    lastTimestamp: '2026-10-01T21:30:50+00:00'
+    involvedObject: cart-service-6d4f8797f6
+  - type: Warning
+    reason: FailedCreate
+    count: 4
+    message: '(combined from similar events): Error creating: pods "cart-service-6d4f8797f6-k49jt"
+      is forbidden: exceeded quota: chaosloop-experiment-quota, requested: pods=1,
+      used: pods=6, limited: pods=4'
+    lastTimestamp: '2026-10-01T21:31:10+00:00'
+    involvedObject: cart-service-6d4f8797f6
+  get_logs:
+    current: '[cart] listening on :8080
+
+      '
+    previous: 'error: previous terminated container "cart" in pod "cart-service-6d4f8797f6-rs25z"
+      not found'
+  get_deployment_spec:
+    metadata:
+      name: cart-service
+      namespace: chaosloop-lab
+      generation: 2
+    spec:
+      replicas: 6
+      progressDeadlineSeconds: 600
+      strategy:
+        type: RollingUpdate
+      selector:
+        matchLabels:
+          app: cart-service
+      template:
+        metadata:
+          labels:
+            app: cart-service
+        spec:
+          nodeSelector: null
+          tolerations: []
+          imagePullSecrets: []
+          volumes: []
+          containers:
+          - name: cart
+            image: localhost:5001/cart:v1.0.0
+            command:
+            - /bin/sh
+            - -c
+            args:
+            - 'echo "[cart] listening on :8080"
+
+              while true; do sleep 5; done
+
+              '
+            ports:
+            - containerPort: 8080
+            env: []
+            envFrom: []
+            resources:
+              requests:
+                cpu: 10m
+                memory: 16Mi
+              limits:
+                memory: 64Mi
+            livenessProbe: null
+            readinessProbe: null
+            volumeMounts: []
+    status:
+      replicas: 2
+      readyReplicas: 2
+      updatedReplicas: 2
+      unavailableReplicas: 4
+      conditions:
+      - type: Progressing
+        status: 'True'
+        reason: NewReplicaSetAvailable
+        message: ReplicaSet "cart-service-6d4f8797f6" has successfully progressed.
+      - type: Available
+        status: 'False'
+        reason: MinimumReplicasUnavailable
+        message: Deployment does not have minimum availability.
+      - type: ReplicaFailure
+        status: 'True'
+        reason: FailedCreate
+        message: 'pods "cart-service-6d4f8797f6-wlsqp" is forbidden: exceeded quota:
+          chaosloop-experiment-quota, requested: pods=1, used: pods=12, limited: pods=4'
+  get_service:
+    metadata:
+      name: cart-service
+      namespace: chaosloop-lab
+    spec:
+      type: ClusterIP
+      selector:
+        app: cart-service
+      ports:
+      - port: 80
+        targetPort: 8080
+        protocol: TCP
+        name: null
+  get_endpoints:
+    metadata:
+      name: cart-service
+      namespace: chaosloop-lab
+    subsets:
+    - addresses:
+      - ip: 10.244.1.46
+      - ip: 10.244.2.59
+      notReadyAddresses: []
+      ports:
+      - port: 8080
+        name: null
+  get_pvc_status: not available
+  get_node_status:
+  - name: chaosloop-control-plane
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-control-plane
+      kubernetes.io/os: linux
+      node-role.kubernetes.io/control-plane: ''
+      node.kubernetes.io/exclude-from-external-load-balancers: ''
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints:
+    - key: node-role.kubernetes.io/control-plane
+      value: null
+      effect: NoSchedule
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.95'
+      memory: 290Mi
+  - name: chaosloop-worker
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints: []
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.14'
+      memory: 130Mi
+  - name: chaosloop-worker2
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker2
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints: []
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.12'
+      memory: 82Mi
+expected:
+  category: quota_exceeded
+  root_cause: The ResourceQuota chaosloop-experiment-quota caps the namespace at 4
+    pods, which are already in use, so the ReplicaSet cannot create the extra cart
+    pods the deployment was scaled to.
+  fix_check:
+    path: spec.hard.pods
+    any_of:
+    - spec.replicas
+    must_exist: true
+    equals: null
+metadata:
+  source: chaos
+  k8s_version: '1.30'
+  runtime: containerd
+  recorded: '2026-10-01'

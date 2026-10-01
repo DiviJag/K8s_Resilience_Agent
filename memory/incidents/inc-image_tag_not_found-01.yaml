@@ -1,0 +1,23 @@
+incident_id: inc-image_tag_not_found-01
+category: image_tag_not_found
+symptom: ImagePullBackOff
+summary: PodImagePullBackOff on cart-service in chaosloop-lab
+signals:
+- '...alhost:5001/cart:v9.9.9": rpc error: code = NotFound desc = failed to pull and
+  unpack image "localhost:5001/cart:v9.9.9": failed to resolve reference "localhost:5001/cart:v9.9.9":
+  localhost:5001/cart:v9.9.9: not found'
+- 'error: previous terminated container "cart" in pod "cart-service" not found'
+- 'error: container "cart" in pod "cart-service" is waiting to start: image can''t
+  be pulled'
+- 'ErrImagePull: rpc error: code = NotFound desc = failed to pull and unpack image
+  "localhost:5001/cart:v9.9.9": failed to resolve reference "localhost:5001/cart:v9.9.9":
+  localhost:5001/cart:v9.9.9: not found'
+- 'ContainersNotReady: containers with unready status: [cart]'
+root_cause: The cart deployment references image tag v9.9.9, which was never pushed
+  to the local registry, so the registry reports it as not found.
+resolution: Corrected spec.template.spec.containers.image in the workload manifest.
+provenance:
+  source: golden
+  source_case_id: image_tag_not_found-01
+  confirmed_by: claude (pending human review)
+  confirmed_at: '2026-10-01'

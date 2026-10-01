@@ -1,0 +1,124 @@
+case_id: crashloop-unknown-segfault-01
+split: test
+trigger:
+  alertname: PodCrashLooping
+  service: geo-tiler
+  namespace: prod
+  pod: geo-tiler-58d7c6b9f2-vj8kn
+evidence:
+  get_pod_status:
+    name: geo-tiler-58d7c6b9f2-vj8kn
+    namespace: prod
+    phase: Running
+    startTime: "2026-09-30T04:10:22Z"
+    containerStatuses:
+      - name: tiler
+        ready: false
+        restartCount: 14
+        image: "registry.internal:5000/geo-tiler:v2.8.1"
+        state:
+          waiting:
+            reason: CrashLoopBackOff
+            message: "back-off 5m0s restarting failed container=tiler pod=geo-tiler-58d7c6b9f2-vj8kn_prod"
+        lastState:
+          terminated:
+            exitCode: 139
+            reason: Error
+            startedAt: "2026-09-30T05:31:40Z"
+            finishedAt: "2026-09-30T05:32:19Z"
+  get_events:
+    - type: Normal
+      reason: Pulled
+      count: 15
+      message: 'Container image "registry.internal:5000/geo-tiler:v2.8.1" already present on machine'
+    - type: Warning
+      reason: BackOff
+      count: 61
+      message: "Back-off restarting failed container tiler in pod geo-tiler-58d7c6b9f2-vj8kn_prod"
+  get_logs:
+    current: ""
+    previous: |
+      geo-tiler 2.8.1 starting
+      loading tile index from /data/index.bin (2.1 GiB)
+      index loaded: 4812033 tiles
+      serving on :8080
+  get_deployment_spec:
+    metadata:
+      name: geo-tiler
+      namespace: prod
+      generation: 3
+      annotations:
+        deployment.kubernetes.io/revision: "3"
+    spec:
+      replicas: 2
+      selector:
+        matchLabels: {app: geo-tiler}
+      template:
+        metadata:
+          labels: {app: geo-tiler}
+        spec:
+          imagePullSecrets:
+            - name: regcred
+          containers:
+            - name: tiler
+              image: "registry.internal:5000/geo-tiler:v2.8.1"
+              ports: [{containerPort: 8080}]
+              env:
+                - {name: INDEX_PATH, value: /data/index.bin}
+                - {name: WORKERS, value: "8"}
+              resources:
+                requests: {cpu: "2", memory: 4Gi}
+                limits: {memory: 6Gi}
+              volumeMounts:
+                - {name: tiles, mountPath: /data}
+          volumes:
+            - name: tiles
+              persistentVolumeClaim: {claimName: geo-tiles}
+    status:
+      replicas: 2
+      readyReplicas: 0
+      updatedReplicas: 2
+      unavailableReplicas: 2
+      conditions:
+        - type: Available
+          status: "False"
+          reason: MinimumReplicasUnavailable
+        - type: Progressing
+          status: "True"
+          reason: NewReplicaSetAvailable
+          lastUpdateTime: "2026-08-20T14:02:51Z"
+  get_service:
+    metadata: {name: geo-tiler, namespace: prod}
+    spec:
+      selector: {app: geo-tiler}
+      ports: [{port: 80, targetPort: 8080, protocol: TCP}]
+  get_endpoints:
+    metadata: {name: geo-tiler, namespace: prod}
+    subsets:
+      - notReadyAddresses: [{ip: 10.244.1.64}, {ip: 10.244.2.48}]
+        ports: [{port: 8080}]
+  get_pvc_status:
+    metadata: {name: geo-tiles, namespace: prod}
+    spec:
+      storageClassName: standard
+      accessModes: [ReadOnlyMany]
+      resources: {requests: {storage: 10Gi}}
+    status: {phase: Bound}
+  get_node_status:
+    - name: kind-worker
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+      allocatedRequests: {cpu: 2300m, memory: 4400Mi}
+expected:
+  category: unknown
+  root_cause: "The container segfaults (exit 139) shortly after it starts serving, logs no error, and nothing in its spec, image, volume or node has changed since August. The available evidence does not identify a cause; it needs application-level debugging."
+  fix_check:
+    path: "*"
+    must_exist: false
+metadata:
+  source: manual
+  k8s_version: "1.30"
+  runtime: containerd
+  recorded: 2026-10-01
+  note: "Abstention case: no taxonomy category fits and the cluster evidence is silent. Naming a cause here is inventing one."

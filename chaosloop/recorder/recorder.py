@@ -32,12 +32,10 @@ class Recorder:
 
         arguments: dict[str, dict[str, Any] | None] = {
             "get_pod_status": {"namespace": namespace, "pod": pod} if pod else None,
-            # Scoped to the involved pod on purpose: namespace-wide events drag in warnings
-            # from unrelated workloads, and a case labelled with one cause must not carry
-            # another fault's evidence.
-            "get_events": {"namespace": namespace, "object_name": pod} if pod else {
-                "namespace": namespace
-            },
+            # Scoped to this workload and everything it owns (its ReplicaSets and pods), never
+            # namespace-wide: unrelated workloads' warnings would put another fault's evidence
+            # into a case labelled with this one.
+            "get_events": {"namespace": namespace, "object_name": deployment},
             "get_logs": {"namespace": namespace, "pod": pod} if pod else None,
             "get_deployment_spec": {"namespace": namespace, "name": deployment},
             "get_service": {"namespace": namespace, "name": service},

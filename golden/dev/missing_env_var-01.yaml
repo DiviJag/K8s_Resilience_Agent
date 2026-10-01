@@ -1,0 +1,362 @@
+case_id: missing_env_var-01
+split: dev
+trigger:
+  alertname: PodCrashLooping
+  service: billing-service
+  namespace: chaosloop-lab
+  pod: billing-service-6c4df46bf8-g9g49
+  extra: {}
+evidence:
+  get_pod_status:
+    name: billing-service-6c4df46bf8-g9g49
+    namespace: chaosloop-lab
+    phase: Running
+    startTime: '2026-10-01T21:12:18+00:00'
+    nodeName: chaosloop-worker
+    conditions:
+    - type: PodReadyToStartContainers
+      status: 'True'
+      reason: null
+      message: null
+    - type: Initialized
+      status: 'True'
+      reason: null
+      message: null
+    - type: Ready
+      status: 'False'
+      reason: ContainersNotReady
+      message: 'containers with unready status: [billing]'
+    - type: ContainersReady
+      status: 'False'
+      reason: ContainersNotReady
+      message: 'containers with unready status: [billing]'
+    - type: PodScheduled
+      status: 'True'
+      reason: null
+      message: null
+    containerStatuses:
+    - name: billing
+      ready: false
+      restartCount: 3
+      image: localhost:5001/busybox:1.36
+      state:
+        terminated:
+          exitCode: 1
+          reason: Error
+          startedAt: '2026-10-01T21:13:00+00:00'
+          finishedAt: '2026-10-01T21:13:00+00:00'
+      lastState:
+        terminated:
+          exitCode: 1
+          reason: Error
+          startedAt: '2026-10-01T21:12:32+00:00'
+          finishedAt: '2026-10-01T21:12:32+00:00'
+  get_events:
+  - type: Normal
+    reason: Scheduled
+    count: 1
+    message: Successfully assigned chaosloop-lab/billing-service-6c4df46bf8-g9g49
+      to chaosloop-worker
+    lastTimestamp: '2026-10-01T21:12:18+00:00'
+    involvedObject: billing-service-6c4df46bf8-g9g49
+  - type: Normal
+    reason: SuccessfulCreate
+    count: 1
+    message: 'Created pod: billing-service-6c4df46bf8-g9g49'
+    lastTimestamp: '2026-10-01T21:12:18+00:00'
+    involvedObject: billing-service-6c4df46bf8
+  - type: Normal
+    reason: ScalingReplicaSet
+    count: 1
+    message: Scaled up replica set billing-service-6c4df46bf8 from 0 to 1
+    lastTimestamp: '2026-10-01T21:12:18+00:00'
+    involvedObject: billing-service
+  - type: Normal
+    reason: Killing
+    count: 1
+    message: Stopping container billing
+    lastTimestamp: '2026-10-01T21:12:19+00:00'
+    involvedObject: billing-service-58669b9cd8-flghg
+  - type: Normal
+    reason: SuccessfulDelete
+    count: 1
+    message: 'Deleted pod: billing-service-58669b9cd8-flghg'
+    lastTimestamp: '2026-10-01T21:12:19+00:00'
+    involvedObject: billing-service-58669b9cd8
+  - type: Normal
+    reason: Scheduled
+    count: 1
+    message: Successfully assigned chaosloop-lab/billing-service-6c4df46bf8-nvbls
+      to chaosloop-worker2
+    lastTimestamp: '2026-10-01T21:12:19+00:00'
+    involvedObject: billing-service-6c4df46bf8-nvbls
+  - type: Normal
+    reason: SuccessfulCreate
+    count: 1
+    message: 'Created pod: billing-service-6c4df46bf8-nvbls'
+    lastTimestamp: '2026-10-01T21:12:19+00:00'
+    involvedObject: billing-service-6c4df46bf8
+  - type: Normal
+    reason: ScalingReplicaSet
+    count: 1
+    message: Scaled down replica set billing-service-58669b9cd8 from 2 to 1
+    lastTimestamp: '2026-10-01T21:12:19+00:00'
+    involvedObject: billing-service
+  - type: Normal
+    reason: ScalingReplicaSet
+    count: 1
+    message: Scaled up replica set billing-service-6c4df46bf8 from 1 to 2
+    lastTimestamp: '2026-10-01T21:12:19+00:00'
+    involvedObject: billing-service
+  - type: Normal
+    reason: Killing
+    count: 1
+    message: Stopping container billing
+    lastTimestamp: '2026-10-01T21:12:20+00:00'
+    involvedObject: billing-service-58669b9cd8-wh6kt
+  - type: Normal
+    reason: SuccessfulDelete
+    count: 1
+    message: 'Deleted pod: billing-service-58669b9cd8-wh6kt'
+    lastTimestamp: '2026-10-01T21:12:20+00:00'
+    involvedObject: billing-service-58669b9cd8
+  - type: Normal
+    reason: ScalingReplicaSet
+    count: 1
+    message: Scaled down replica set billing-service-58669b9cd8 from 1 to 0
+    lastTimestamp: '2026-10-01T21:12:20+00:00'
+    involvedObject: billing-service
+  - type: Normal
+    reason: Pulled
+    count: 4
+    message: Container image "localhost:5001/busybox:1.36" already present on machine
+      and can be accessed by the pod
+    lastTimestamp: '2026-10-01T21:13:00+00:00'
+    involvedObject: billing-service-6c4df46bf8-g9g49
+  - type: Normal
+    reason: Created
+    count: 4
+    message: Container created
+    lastTimestamp: '2026-10-01T21:13:00+00:00'
+    involvedObject: billing-service-6c4df46bf8-g9g49
+  - type: Normal
+    reason: Started
+    count: 4
+    message: Container started
+    lastTimestamp: '2026-10-01T21:13:00+00:00'
+    involvedObject: billing-service-6c4df46bf8-g9g49
+  - type: Warning
+    reason: BackOff
+    count: 3
+    message: Back-off restarting failed container billing in pod billing-service-6c4df46bf8-g9g49_chaosloop-lab(15c5c483-9b0d-4fe8-8f51-0dbcfb1c8ae0)
+    lastTimestamp: '2026-10-01T21:13:00+00:00'
+    involvedObject: billing-service-6c4df46bf8-g9g49
+  - type: Normal
+    reason: Pulled
+    count: 4
+    message: Container image "localhost:5001/busybox:1.36" already present on machine
+      and can be accessed by the pod
+    lastTimestamp: '2026-10-01T21:13:01+00:00'
+    involvedObject: billing-service-6c4df46bf8-nvbls
+  - type: Normal
+    reason: Created
+    count: 4
+    message: Container created
+    lastTimestamp: '2026-10-01T21:13:01+00:00'
+    involvedObject: billing-service-6c4df46bf8-nvbls
+  - type: Normal
+    reason: Started
+    count: 4
+    message: Container started
+    lastTimestamp: '2026-10-01T21:13:01+00:00'
+    involvedObject: billing-service-6c4df46bf8-nvbls
+  - type: Warning
+    reason: BackOff
+    count: 3
+    message: Back-off restarting failed container billing in pod billing-service-6c4df46bf8-nvbls_chaosloop-lab(3c318319-535f-4cf5-b547-522e09ec92ea)
+    lastTimestamp: '2026-10-01T21:13:01+00:00'
+    involvedObject: billing-service-6c4df46bf8-nvbls
+  get_logs:
+    current: '[billing] boot sequence start
+
+      [billing] FATAL config: required environment variable DATABASE_URL is not set
+
+      '
+    previous: unable to retrieve container logs for containerd://ffbc51daf87f42319582c30d285c83e49aec242c9b740ffb37204f30090e4226
+  get_deployment_spec:
+    metadata:
+      name: billing-service
+      namespace: chaosloop-lab
+      generation: 2
+    spec:
+      replicas: 2
+      progressDeadlineSeconds: 600
+      strategy:
+        type: RollingUpdate
+      selector:
+        matchLabels:
+          app: billing-service
+      template:
+        metadata:
+          labels:
+            app: billing-service
+        spec:
+          nodeSelector: null
+          tolerations: []
+          imagePullSecrets: []
+          volumes: []
+          containers:
+          - name: billing
+            image: localhost:5001/busybox:1.36
+            command:
+            - /bin/sh
+            - -c
+            args:
+            - "echo \"[billing] boot sequence start\"\nif [ -z \"$DATABASE_URL\" ];\
+              \ then\n  echo \"[billing] FATAL config: required environment variable\
+              \ DATABASE_URL is not set\"\n  exit 1\nfi\ncase \"$MAX_WORKERS\" in\n\
+              \  ''|*[!0-9]*) echo \"[billing] FATAL config: MAX_WORKERS must be an\
+              \ integer, got '$MAX_WORKERS'\"; exit 78 ;;\nesac\necho \"[billing]\
+              \ listening on :8080 with $MAX_WORKERS workers\"\nwhile true; do sleep\
+              \ 5; done\n"
+            ports:
+            - containerPort: 8080
+            env: []
+            envFrom:
+            - configMapRef: billing-config
+            resources:
+              requests:
+                cpu: 10m
+                memory: 16Mi
+              limits:
+                memory: 64Mi
+            livenessProbe: null
+            readinessProbe: null
+            volumeMounts: []
+    status:
+      replicas: 2
+      readyReplicas: null
+      updatedReplicas: 2
+      unavailableReplicas: 2
+      conditions:
+      - type: Progressing
+        status: 'True'
+        reason: NewReplicaSetAvailable
+        message: ReplicaSet "billing-service-6c4df46bf8" has successfully progressed.
+      - type: Available
+        status: 'False'
+        reason: MinimumReplicasUnavailable
+        message: Deployment does not have minimum availability.
+  get_service:
+    metadata:
+      name: billing-service
+      namespace: chaosloop-lab
+    spec:
+      type: ClusterIP
+      selector:
+        app: billing-service
+      ports:
+      - port: 80
+        targetPort: 8080
+        protocol: TCP
+        name: null
+  get_endpoints:
+    metadata:
+      name: billing-service
+      namespace: chaosloop-lab
+    subsets:
+    - addresses: []
+      notReadyAddresses:
+      - ip: 10.244.1.16
+      - ip: 10.244.2.24
+      ports:
+      - port: 8080
+        name: null
+  get_pvc_status: not available
+  get_node_status:
+  - name: chaosloop-control-plane
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-control-plane
+      kubernetes.io/os: linux
+      node-role.kubernetes.io/control-plane: ''
+      node.kubernetes.io/exclude-from-external-load-balancers: ''
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints:
+    - key: node-role.kubernetes.io/control-plane
+      value: null
+      effect: NoSchedule
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.95'
+      memory: 290Mi
+  - name: chaosloop-worker
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints: []
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.13'
+      memory: 98Mi
+  - name: chaosloop-worker2
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker2
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints: []
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.13'
+      memory: 114Mi
+expected:
+  category: missing_env_var
+  root_cause: The billing container exits at startup because DATABASE_URL is required
+    and the pod spec no longer sets it, and the billing-config ConfigMap does not
+    supply it either.
+  fix_check:
+    path: spec.template.spec.containers.env
+    any_of: []
+    must_exist: true
+    equals: null
+metadata:
+  source: chaos
+  k8s_version: '1.30'
+  runtime: containerd
+  recorded: '2026-10-01'

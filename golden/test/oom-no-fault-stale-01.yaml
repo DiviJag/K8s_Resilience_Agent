@@ -1,0 +1,92 @@
+case_id: oom-no-fault-stale-01
+split: test
+trigger:
+  alertname: PodOOMKilled
+  service: search-indexer
+  namespace: prod
+  pod: search-indexer-7b5c9d8f41-hp3vj
+  extra:
+    expr: 'kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1'
+evidence:
+  get_pod_status:
+    name: search-indexer-7b5c9d8f41-hp3vj
+    namespace: prod
+    phase: Running
+    startTime: "2026-09-12T10:21:44Z"
+    containerStatuses:
+      - name: indexer
+        ready: true
+        restartCount: 1
+        image: "registry.internal:5000/search-indexer:v5.0.2"
+        state:
+          running:
+            startedAt: "2026-09-21T03:17:02Z"
+        lastState:
+          terminated:
+            exitCode: 137
+            reason: OOMKilled
+            startedAt: "2026-09-12T10:21:50Z"
+            finishedAt: "2026-09-21T03:16:58Z"
+  get_events: []
+  get_logs:
+    current: |
+      2026-09-30T23:00:00Z INFO  indexer healthy: queue_depth=12 docs_per_s=2210 heap_inuse=1.1GiB
+      2026-10-01T00:00:00Z INFO  indexer healthy: queue_depth=9 docs_per_s=2304 heap_inuse=1.1GiB
+      2026-10-01T01:00:00Z INFO  indexer healthy: queue_depth=14 docs_per_s=2187 heap_inuse=1.2GiB
+    previous: |
+      2026-09-21T03:02:10Z INFO  starting full reindex of 41M documents
+      2026-09-21T03:16:51Z WARN  heap_inuse=3.9GiB during bulk merge
+  get_deployment_spec:
+    metadata:
+      name: search-indexer
+      namespace: prod
+      generation: 7
+    spec:
+      replicas: 1
+      selector:
+        matchLabels: {app: search-indexer}
+      template:
+        metadata:
+          labels: {app: search-indexer}
+        spec:
+          imagePullSecrets:
+            - name: regcred
+          containers:
+            - name: indexer
+              image: "registry.internal:5000/search-indexer:v5.0.2"
+              resources:
+                requests: {cpu: "1", memory: 2Gi}
+                limits: {memory: 4Gi}
+    status:
+      replicas: 1
+      readyReplicas: 1
+      updatedReplicas: 1
+      unavailableReplicas: 0
+  get_service:
+    metadata: {name: search-indexer, namespace: prod}
+    spec:
+      selector: {app: search-indexer}
+      ports: [{port: 80, targetPort: 9090, protocol: TCP}]
+  get_endpoints:
+    metadata: {name: search-indexer, namespace: prod}
+    subsets:
+      - addresses: [{ip: 10.244.1.36}]
+        ports: [{port: 9090}]
+  get_pvc_status: not available
+  get_node_status:
+    - name: kind-worker
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+expected:
+  category: no_fault
+  root_cause: "The only OOM kill was nine days ago during a one-off full reindex; the container has run healthily since. The alert fires because the last-terminated-reason metric keeps reporting that old OOM, not because anything is failing now."
+  fix_check:
+    path: "*"
+    must_exist: false
+metadata:
+  source: manual
+  k8s_version: "1.30"
+  runtime: containerd
+  recorded: 2026-10-01
+  note: "Negative control. kube_pod_container_status_last_terminated_reason stays set until the next termination, so naive OOM alerts keep firing long after the event."

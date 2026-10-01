@@ -17,6 +17,7 @@ class ToolCallRecord(BaseModel):
 class EvalRecord(BaseModel):
     run_id: str
     case_id: str
+    split: Literal["dev", "test"] | None = None
     tier: Literal["A", "B"] = "A"
     repeat: int
 
@@ -35,7 +36,20 @@ class EvalRecord(BaseModel):
     fix_correct: bool
     is_false_positive: bool
     malformed: bool
+
+    # The confidence the system reports: calibrated if a calibrator was applied, else raw
+    # self-consistency, else the model's own number. The components are kept so calibration
+    # can be refit, and self-report compared against consistency, without re-running anything.
     confidence: float | None
+    self_reported_confidence: float | None = None
+    consistency_confidence: float | None = None
+    calibrated_confidence: float | None = None
+    samples: list[str | None] = Field(default_factory=list)
+
+    root_cause_score: float | None = None
+    judge_model: str | None = None
+    judge_rationale: str | None = None
+    judge_cost_usd: float = 0.0
 
     tool_calls: list[ToolCallRecord] = Field(default_factory=list)
     tokens: dict[str, int] = Field(default_factory=dict)

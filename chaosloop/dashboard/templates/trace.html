@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ record.case_id }} - ChaosLoop{% endblock %}
+{% block content %}
+<div class="crumbs"><a href="{{ url_for('index') }}">Runs</a> / <a href="{{ url_for('run_page', run_id=summary.run_id) }}">{{ summary.run_id }}</a> /</div>
+<h1>{{ record.case_id }} <span class="subtle">repeat {{ record.repeat }}</span></h1>
+<div class="meta">
+  <span class="chip">{{ record.tool_calls | length }} tool calls</span>
+  <span class="chip">{{ record.tokens.get("total", 0) }} tokens, {{ record.tokens.get("cached", 0) }} cached</span>
+  <span class="chip">${{ record.cost_usd | num(4) }}</span>
+  <span class="chip">{{ record.latency_s | num(1) }} s</span>
+</div>
+
+{% if outcome == "pass" and record.fix_correct %}
+<div class="banner success"><span class="icon">&#10003;</span><span>Correct: the agent named <strong>{{ record.expected_category.value }}</strong> and proposed an acceptable fix.</span></div>
+{% elif outcome == "pass" %}
+<div class="banner warning"><span class="icon">!</span><span>Right cause, wrong fix: the agent named <strong>{{ record.expected_category.value }}</strong>, but its proposed patch did not pass the structural check.</span></div>
+{% elif outcome == "fail" %}
+<div class="banner error"><span class="icon">&#10007;</span><span>Wrong: expected <strong>{{ record.expected_category.value }}</strong>, the agent said <strong>{{ record.agent_category.value }}</strong>{% if record.is_false_positive %} - a false positive on a healthy cluster{% endif %}.</span></div>
+{% elif outcome == "malformed" %}
+<div class="banner warning"><span class="icon">!</span><span>No valid answer: {{ record.error or "the final message did not match the diagnosis schema" }}.</span></div>
+{% else %}
+<div class="banner warning"><span class="icon">!</span><span>Never reached the model: {{ record.error }}</span></div>
+{% endif %}
+
+<div class="pair">
+  <section class="card expected">
+    <h2>Expected</h2>
+    <div class="field"><div class="label">Category</div>{{ record.expected_category.value }}</div>
+    {% if trace %}
+    <div class="field"><div class="label">Root cause</div>{{ trace.expected.root_cause }}</div>
+    <div class="field"><div class="label">Fix must {{ "touch" if trace.expected.fix_check.must_exist else "not touch" }}</div>
+      <code>{{ ([trace.expected.fix_check.path] + (trace.expected.fix_check.any_of or [])) | join(" or ") }}</code></div>
+    {% endif %}
+  </section>
+  <section class="card agent">
+    <h2>Agent</h2>
+    <div class="field"><div class="label">Category</div>{{ record.agent_category.value if record.agent_category else "no valid answer" }}</div>
+    <div class="field"><div class="label">Root cause</div>{{ record.agent_root_cause or "-" }}</div>
+    <div class="field"><div class="label">Proposed patch</div>{% if record.agent_fix_patch %}<pre>{{ record.agent_fix_patch }}</pre>{% else %}<span class="muted">none</span>{% endif %}</div>
+    <div class="field"><div class="label">Confidence</div>
+      reported {{ record.confidence | num }}
+      <span class="muted">(self-reported {{ record.self_reported_confidence | num }}, self-consistency {{ record.consistency_confidence | num }}, calibrated {{ record.calibrated_confidence | num }})</span>
+    </div>
+  </section>
+</div>
+
+{% if record.root_cause_score is not none or record.judge_rationale %}
+<section class="card">
+  <h2>Root-cause judge</h2>
+  <p><strong>{{ record.root_cause_score | num(1) }}</strong> <span class="muted">from {{ record.judge_model }}</span></p>
+  <p class="subtle">{{ record.judge_rationale }}</p>
+</section>
+{% endif %}
+
+{% if record.samples %}
+<section class="card">
+  <h2>Self-consistency samples</h2>
+  <p class="muted">The answer was resampled with tools off; confidence is the share that agree with it.</p>
+  <div class="samples">
+    {% for s in record.samples %}
+    {% set agrees = record.agent_category and s == record.agent_category.value %}
+    <span class="status {{ 'pass' if agrees else 'fail' }}">{{ "&#10003;" | safe if agrees else "&#10007;" | safe }} {{ s or "unparseable" }}</span>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Investigation</h2>
+  {% if steps %}
+  <ol class="steps">
+    {% for step in steps %}
+    <li class="{{ step.kind }}">
+      {% if step.kind == "system" %}
+      <details><summary class="step-title">{{ step.title }}</summary><pre>{{ step.body }}</pre></details>
+      {% else %}
+      <div class="step-title">{{ step.title }}</div>
+      <pre>{{ step.body }}</pre>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="empty">No trace was saved for this run.</p>
+  {% endif %}
+</section>
+{% endblock %}

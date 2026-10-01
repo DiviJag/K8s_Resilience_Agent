@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Compare - ChaosLoop{% endblock %}
+{% block content %}
+{% macro delta(row, places) %}
+{% if row.delta is none %}<span class="delta same">-</span>
+{% else %}<span class="delta {{ row.direction }}">{% if row.direction == "better" %}&#9650;{% elif row.direction == "worse" %}&#9660;{% else %}&#9679;{% endif %} {{ row.delta | signed(places) }}</span>{% endif %}
+{% endmacro %}
+<div class="crumbs"><a href="{{ url_for('index') }}">Runs</a> /</div>
+<h1>{{ "Memory lift" if is_lift else "Run comparison" }}</h1>
+<div class="meta">
+  <span class="chip">baseline <a href="{{ url_for('run_page', run_id=baseline.run_id) }}">{{ baseline.run_id }}</a></span>
+  {% if baseline.memory_snapshot %}<span class="chip memory-on">memory on</span>{% else %}<span class="chip">memory off</span>{% endif %}
+  <span class="chip">candidate <a href="{{ url_for('run_page', run_id=candidate.run_id) }}">{{ candidate.run_id }}</a></span>
+  {% if candidate.memory_snapshot %}<span class="chip memory-on">memory on</span>{% else %}<span class="chip">memory off</span>{% endif %}
+</div>
+{% if not same_cases %}
+<div class="banner warning"><span class="icon">!</span><span>The runs cover different cases, so these changes are not like for like.</span></div>
+{% endif %}
+
+<section class="card">
+  <h2>Headline metrics</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Metric</th><th class="num">Baseline</th><th class="num">Candidate</th><th class="num">Change</th></tr></thead>
+      <tbody>
+        {% for row in metric_rows %}
+        <tr>
+          <td>{{ row.label }}</td>
+          <td class="num">{{ row.before | num(row.places) }}</td>
+          <td class="num">{{ row.after | num(row.places) }}</td>
+          <td class="num">{{ delta(row, row.places) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">&#9650; better and &#9660; worse account for direction: lower is better for false positives, calibration error and cost.</p>
+</section>
+
+<section class="card">
+  <h2>Category accuracy</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Category</th><th class="num">Baseline</th><th class="num">Candidate</th><th class="num">Change</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr><td>{{ row.category }}</td><td class="num">{{ row.before | pct }}</td><td class="num">{{ row.after | pct }}</td><td class="num">{{ delta(row, 2) }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

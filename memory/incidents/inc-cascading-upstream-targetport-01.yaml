@@ -1,0 +1,22 @@
+incident_id: inc-cascading-upstream-targetport-01
+category: target_port_mismatch
+symptom: ServiceUnreachable
+summary: PodCrashLooping on checkout-api in prod
+signals:
+- Back-off restarting failed container checkout in pod checkout-api-84f6d9c7b5-mm7rd_prod
+- '[checkout] redis: dial tcp 10.96.88.21:6379: connect: connection refused (retry
+  1/3)'
+- '[checkout] redis: dial tcp 10.96.88.21:6379: connect: connection refused (retry
+  3/3)'
+- '[checkout] fatal: session store unreachable'
+- 'CrashLoopBackOff: back-off 5m0s restarting failed container=checkout pod=checkout-api-84f6d9c7b5-mm7rd_prod'
+- terminated Error exitCode=1
+root_cause: 'checkout-api crashes because its session store is unreachable: the session-cache
+  Service forwards to targetPort 6380 while redis listens on 6379, so connections
+  are refused. checkout-api''s own configuration is correct.'
+resolution: Corrected spec.ports.targetPort in the workload manifest.
+provenance:
+  source: golden
+  source_case_id: cascading-upstream-targetport-01
+  confirmed_by: claude (pending human review)
+  confirmed_at: '2026-10-01'

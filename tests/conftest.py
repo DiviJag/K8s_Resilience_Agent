@@ -28,6 +28,8 @@ class FakeLLMClient:
         self.tokens = tokens
         self.cost = cost
         self.seen_messages: list[list[dict[str, Any]]] = []
+        self.seen_options: list[dict[str, Any]] = []
+        self.seen_tools: list[list[str]] = []
 
     @property
     def sent_text(self) -> str:
@@ -38,9 +40,16 @@ class FakeLLMClient:
         )
 
     def chat(
-        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]], model: str
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        model: str,
+        temperature: float | None = None,
+        tool_choice: str | None = None,
     ) -> ChatResult:
         self.seen_messages.append([dict(m) for m in messages])
+        self.seen_options.append({"temperature": temperature, "tool_choice": tool_choice})
+        self.seen_tools.append([spec["function"]["name"] for spec in tools])
         step = self.script.pop(0) if self.script else '{"never": "scripted"}'
 
         if isinstance(step, str):

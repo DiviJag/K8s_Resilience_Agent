@@ -11,33 +11,23 @@ param(
     [int]$RegistryPort = 5001
 )
 
-$ErrorActionPreference = "Stop"
+# 'Continue', with every native call judged by its exit code: kind, docker and kubectl write
+# progress and warnings to stderr, and under 'Stop' Windows PowerShell turns that stderr into a
+# terminating error whenever the caller redirects it (2>&1, a pipe, a CI log capture).
+$ErrorActionPreference = "Continue"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $context = "kind-$ClusterName"
 $registryDir = "/etc/containerd/certs.d/localhost:$RegistryPort"
 
+function Assert-Exit {
+    param([string]$What)
+    if ($LASTEXITCODE -ne 0) { throw "$What failed with exit code $LASTEXITCODE" }
+}
+
 function Invoke-Kubectl {
     param([Parameter(ValueFromRemainingArguments = $true)][string[]]$KubectlArgs)
     & kubectl --context $context @KubectlArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "kubectl $($KubectlArgs -join ' ') failed with exit code $LASTEXITCODE"
-    }
-}
-
-function Get-KindClusters {
-    # `kind get clusters` writes "No kind clusters found." to stderr, and under
-    # $ErrorActionPreference='Stop' Windows PowerShell turns native stderr into a terminating
-    # NativeCommandError. Drop to Continue around the call and filter the notice out.
-    $previous = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    try {
-        $output = & kind get clusters 2>&1
-        return @($output | ForEach-Object { "$_".Trim() } |
-            Where-Object { $_ -and $_ -notmatch "No kind clusters found" })
-    }
-    finally {
-        $ErrorActionPreference = $previous
-    }
+    Assert-Exit "kubectl $($KubectlArgs -join ' ')"
 }
 
 Write-Host "==> checking Docker" -ForegroundColor Cyan
@@ -50,17 +40,22 @@ if (-not $running) {
     $existing = & docker ps -a --filter "name=^/$RegistryName$" --format '{{.Names}}'
     if ($existing) {
         & docker start $RegistryName | Out-Null
+        Assert-Exit "docker start $RegistryName"
     }
     else {
-        & docker run -d --restart=always -p "127.0.0.1:${RegistryPort}:5000" --name $RegistryName registry:2 | Out-Null
+        & docker run -d --restart=always -p "127.0.0.1:${RegistryPort}:5000" `
+            --name $RegistryName registry:2 | Out-Null
+        Assert-Exit "docker run $RegistryName"
     }
 }
 
 Write-Host "==> kind cluster ($ClusterName)" -ForegroundColor Cyan
-$clusters = Get-KindClusters
+# "No kind clusters found." arrives on stderr; keep only real cluster names.
+$clusters = @(& kind get clusters 2>&1 | ForEach-Object { "$_".Trim() } |
+    Where-Object { $_ -and $_ -notmatch "No kind clusters found" })
 if ($clusters -notcontains $ClusterName) {
     & kind create cluster --name $ClusterName --config (Join-Path $repoRoot "lab\kind-config.yaml")
-    if ($LASTEXITCODE -ne 0) { throw "kind create cluster failed" }
+    Assert-Exit "kind create cluster"
 }
 else {
     Write-Host "    already exists"
@@ -77,8 +72,9 @@ $tomlPath = Join-Path ([System.IO.Path]::GetTempPath()) "chaosloop-hosts.toml"
 try {
     foreach ($node in (& kind get nodes --name $ClusterName)) {
         & docker exec $node mkdir -p $registryDir
+        Assert-Exit "mkdir certs.d on $node"
         & docker cp $tomlPath "${node}:$registryDir/hosts.toml"
-        if ($LASTEXITCODE -ne 0) { throw "failed to install hosts.toml on $node" }
+        Assert-Exit "install hosts.toml on $node"
     }
 }
 finally {
@@ -88,22 +84,27 @@ finally {
 $connected = & docker inspect -f '{{json .NetworkSettings.Networks.kind}}' $RegistryName
 if ($connected -eq "null") {
     & docker network connect kind $RegistryName
+    Assert-Exit "docker network connect"
 }
 
 Write-Host "==> seeding images into the registry" -ForegroundColor Cyan
 & docker pull busybox:1.36 | Out-Null
+Assert-Exit "docker pull busybox:1.36"
 foreach ($ref in @("busybox:1.36", "cart:v1.0.0")) {
     & docker tag busybox:1.36 "localhost:$RegistryPort/$ref"
+    Assert-Exit "docker tag $ref"
     & docker push "localhost:$RegistryPort/$ref" | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "failed to push localhost:$RegistryPort/$ref" }
+    Assert-Exit "docker push localhost:$RegistryPort/$ref"
 }
 
 Write-Host "==> applying lab manifests" -ForegroundColor Cyan
 & kubectl config use-context $context | Out-Null
+Assert-Exit "kubectl config use-context $context"
 Invoke-Kubectl apply -f (Join-Path $repoRoot "lab\services")
 Invoke-Kubectl apply -f (Join-Path $repoRoot "lab\rbac\investigator.yaml")
-Invoke-Kubectl -n chaosloop-lab rollout status deployment/billing-service --timeout=120s
-Invoke-Kubectl -n chaosloop-lab rollout status deployment/cart-service --timeout=120s
+foreach ($deployment in @("billing-service", "cart-service", "analytics-worker", "reporting-service")) {
+    Invoke-Kubectl -n chaosloop-lab rollout status "deployment/$deployment" --timeout=180s
+}
 
 Write-Host ""
 Write-Host "lab is up. context=$context namespace=chaosloop-lab" -ForegroundColor Green

@@ -28,11 +28,21 @@ class CaseMetadata(BaseModel):
 
 
 class FixCheck(BaseModel):
-    """Structural check on the proposed patch (HLD §7.1)."""
+    """Structural check on the proposed patch (HLD §7.1).
+
+    `any_of` lists further paths that are equally correct, for faults with more than one
+    legitimate fix - an unbound claim can be fixed on the claim or on the pod's volume, an
+    exhausted quota by raising the quota or by lowering replicas.
+    """
 
     path: str
+    any_of: list[str] = []
     must_exist: bool = True
     equals: Any | None = None
+
+    @property
+    def paths(self) -> list[str]:
+        return [self.path, *self.any_of]
 
 
 class Expected(BaseModel):

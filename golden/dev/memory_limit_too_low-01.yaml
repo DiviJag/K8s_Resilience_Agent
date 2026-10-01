@@ -1,0 +1,308 @@
+case_id: memory_limit_too_low-01
+split: dev
+trigger:
+  alertname: PodOOMKilled
+  service: analytics-worker
+  namespace: chaosloop-lab
+  pod: analytics-worker-7b885d7f8f-zhdsz
+  extra: {}
+evidence:
+  get_pod_status:
+    name: analytics-worker-7b885d7f8f-zhdsz
+    namespace: chaosloop-lab
+    phase: Running
+    startTime: '2026-10-01T21:15:45+00:00'
+    nodeName: chaosloop-worker
+    conditions:
+    - type: PodReadyToStartContainers
+      status: 'True'
+      reason: null
+      message: null
+    - type: Initialized
+      status: 'True'
+      reason: null
+      message: null
+    - type: Ready
+      status: 'False'
+      reason: ContainersNotReady
+      message: 'containers with unready status: [analytics]'
+    - type: ContainersReady
+      status: 'False'
+      reason: ContainersNotReady
+      message: 'containers with unready status: [analytics]'
+    - type: PodScheduled
+      status: 'True'
+      reason: null
+      message: null
+    containerStatuses:
+    - name: analytics
+      ready: false
+      restartCount: 2
+      image: localhost:5001/busybox:1.36
+      state:
+        waiting:
+          reason: CrashLoopBackOff
+          message: back-off 20s restarting failed container=analytics pod=analytics-worker-7b885d7f8f-zhdsz_chaosloop-lab(c0623382-9929-45dc-ad8a-26ef48bb7666)
+      lastState:
+        terminated:
+          exitCode: 128
+          reason: StartError
+          startedAt: '1970-01-01T00:00:00+00:00'
+          finishedAt: '2026-10-01T21:15:59+00:00'
+  get_events:
+  - type: Normal
+    reason: Killing
+    count: 1
+    message: Stopping container analytics
+    lastTimestamp: '2026-10-01T21:15:45+00:00'
+    involvedObject: analytics-worker-79b644b56d-fbxsq
+  - type: Normal
+    reason: SuccessfulDelete
+    count: 1
+    message: 'Deleted pod: analytics-worker-79b644b56d-fbxsq'
+    lastTimestamp: '2026-10-01T21:15:45+00:00'
+    involvedObject: analytics-worker-79b644b56d
+  - type: Normal
+    reason: Started
+    count: 1
+    message: Container started
+    lastTimestamp: '2026-10-01T21:15:45+00:00'
+    involvedObject: analytics-worker-7b885d7f8f-zhdsz
+  - type: Normal
+    reason: SuccessfulCreate
+    count: 1
+    message: 'Created pod: analytics-worker-7b885d7f8f-zhdsz'
+    lastTimestamp: '2026-10-01T21:15:45+00:00'
+    involvedObject: analytics-worker-7b885d7f8f
+  - type: Normal
+    reason: ScalingReplicaSet
+    count: 1
+    message: Scaled up replica set analytics-worker-7b885d7f8f from 0 to 1
+    lastTimestamp: '2026-10-01T21:15:45+00:00'
+    involvedObject: analytics-worker
+  - type: Normal
+    reason: ScalingReplicaSet
+    count: 1
+    message: Scaled down replica set analytics-worker-79b644b56d from 1 to 0
+    lastTimestamp: '2026-10-01T21:15:45+00:00'
+    involvedObject: analytics-worker
+  - type: Normal
+    reason: Scheduled
+    count: null
+    message: Successfully assigned chaosloop-lab/analytics-worker-7b885d7f8f-zhdsz
+      to chaosloop-worker
+    lastTimestamp: null
+    involvedObject: analytics-worker-7b885d7f8f-zhdsz
+  - type: Normal
+    reason: Created
+    count: 3
+    message: Container created
+    lastTimestamp: '2026-10-01T21:15:59+00:00'
+    involvedObject: analytics-worker-7b885d7f8f-zhdsz
+  - type: Warning
+    reason: Failed
+    count: 2
+    message: 'Error: failed to create containerd task: failed to create shim task:
+      OCI runtime create failed: runc create failed: unable to start container process:
+      container init was OOM-killed (memory limit too low?)'
+    lastTimestamp: '2026-10-01T21:15:59+00:00'
+    involvedObject: analytics-worker-7b885d7f8f-zhdsz
+  - type: Warning
+    reason: BackOff
+    count: 2
+    message: Back-off restarting failed container analytics in pod analytics-worker-7b885d7f8f-zhdsz_chaosloop-lab(c0623382-9929-45dc-ad8a-26ef48bb7666)
+    lastTimestamp: '2026-10-01T21:16:00+00:00'
+    involvedObject: analytics-worker-7b885d7f8f-zhdsz
+  - type: Normal
+    reason: Pulled
+    count: 4
+    message: Container image "localhost:5001/busybox:1.36" already present on machine
+      and can be accessed by the pod
+    lastTimestamp: '2026-10-01T21:16:22+00:00'
+    involvedObject: analytics-worker-7b885d7f8f-zhdsz
+  get_logs:
+    current: ''
+    previous: ''
+  get_deployment_spec:
+    metadata:
+      name: analytics-worker
+      namespace: chaosloop-lab
+      generation: 2
+    spec:
+      replicas: 1
+      progressDeadlineSeconds: 600
+      strategy:
+        type: RollingUpdate
+      selector:
+        matchLabels:
+          app: analytics-worker
+      template:
+        metadata:
+          labels:
+            app: analytics-worker
+        spec:
+          nodeSelector: null
+          tolerations: []
+          imagePullSecrets: []
+          volumes:
+          - name: shm
+            emptyDir:
+              medium: Memory
+          containers:
+          - name: analytics
+            image: localhost:5001/busybox:1.36
+            command:
+            - /bin/sh
+            - -c
+            args:
+            - 'echo "[analytics] allocating ${ALLOC_MB}MB working set"
+
+              dd if=/dev/zero of=/dev/shm/workingset bs=1M count="$ALLOC_MB" 2>/dev/null
+
+              echo "[analytics] steady state"
+
+              while true; do sleep 5; done
+
+              '
+            ports: []
+            env:
+            - name: ALLOC_MB
+              value: '256'
+            envFrom: []
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                memory: 96Mi
+            livenessProbe: null
+            readinessProbe: null
+            volumeMounts:
+            - name: shm
+              mountPath: /dev/shm
+    status:
+      replicas: 1
+      readyReplicas: null
+      updatedReplicas: 1
+      unavailableReplicas: 1
+      conditions:
+      - type: Progressing
+        status: 'True'
+        reason: NewReplicaSetAvailable
+        message: ReplicaSet "analytics-worker-7b885d7f8f" has successfully progressed.
+      - type: Available
+        status: 'False'
+        reason: MinimumReplicasUnavailable
+        message: Deployment does not have minimum availability.
+  get_service:
+    metadata:
+      name: analytics-worker
+      namespace: chaosloop-lab
+    spec:
+      type: ClusterIP
+      selector:
+        app: analytics-worker
+      ports:
+      - port: 80
+        targetPort: 8080
+        protocol: TCP
+        name: null
+  get_endpoints:
+    metadata:
+      name: analytics-worker
+      namespace: chaosloop-lab
+    subsets:
+    - addresses: []
+      notReadyAddresses:
+      - ip: 10.244.2.37
+      ports:
+      - port: 8080
+        name: null
+  get_pvc_status: not available
+  get_node_status:
+  - name: chaosloop-control-plane
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-control-plane
+      kubernetes.io/os: linux
+      node-role.kubernetes.io/control-plane: ''
+      node.kubernetes.io/exclude-from-external-load-balancers: ''
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints:
+    - key: node-role.kubernetes.io/control-plane
+      value: null
+      effect: NoSchedule
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.95'
+      memory: 290Mi
+  - name: chaosloop-worker
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints: []
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.14'
+      memory: 130Mi
+  - name: chaosloop-worker2
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker2
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints: []
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.12'
+      memory: 82Mi
+expected:
+  category: memory_limit_too_low
+  root_cause: analytics-worker now fills a 256MB working set (ALLOC_MB=256) in memory-backed
+    storage, far over its 96Mi memory limit, so the kernel OOM-kills it at startup.
+  fix_check:
+    path: spec.template.spec.containers.resources.limits.memory
+    any_of:
+    - spec.template.spec.containers.env
+    must_exist: true
+    equals: null
+metadata:
+  source: chaos
+  k8s_version: '1.30'
+  runtime: containerd
+  recorded: '2026-10-01'

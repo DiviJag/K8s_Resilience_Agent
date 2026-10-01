@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ChaosLoop{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+</head>
+<body>
+  <header class="top">
+    <div class="inner">
+      <a class="brand" href="{{ url_for('index') }}">ChaosLoop</a>
+      <span class="tag">Tier A evaluation</span>
+      <nav>
+        <a href="{{ url_for('index') }}" {% if request.url.path == "/" %}class="active" aria-current="page"{% endif %}>Runs</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

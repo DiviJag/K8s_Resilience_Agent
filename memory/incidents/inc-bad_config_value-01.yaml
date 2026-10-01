@@ -1,0 +1,19 @@
+incident_id: inc-bad_config_value-01
+category: bad_config_value
+symptom: CrashLoopBackOff
+summary: PodCrashLooping on billing-service in chaosloop-lab
+signals:
+- Back-off restarting failed container billing in pod billing-service-66459cd5ff-bqplc_chaosloop-lab(715800e5-8aae-4618-ab6f-da7efce3d9aa)
+- Back-off restarting failed container billing in pod billing-service-66459cd5ff-gvxts_chaosloop-lab(e72574dd-bbf1-4e8b-af89-0a1d55a2d9b2)
+- unable to retrieve container logs for containerd://fafc56f4acb4af172016b1c90a84b72b5f6cfa7004b521e691d27c258a573750
+- '[billing] FATAL config: MAX_WORKERS must be an integer, got ''many'''
+- terminated Error exitCode=78
+- 'ContainersNotReady: containers with unready status: [billing]'
+root_cause: The billing-config ConfigMap sets MAX_WORKERS to the non-integer 'many',
+  which billing rejects at startup with exit code 78 (EX_CONFIG).
+resolution: Corrected data.MAX_WORKERS in the workload manifest.
+provenance:
+  source: golden
+  source_case_id: bad_config_value-01
+  confirmed_by: claude (pending human review)
+  confirmed_at: '2026-10-01'

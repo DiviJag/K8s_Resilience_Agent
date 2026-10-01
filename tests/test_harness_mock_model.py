@@ -136,6 +136,21 @@ def test_step_budget_exhaustion_yields_unknown():
     assert len(trace.tool_calls) == 3
 
 
+def test_harness_does_not_credit_budget_exhaustion_on_unknown_cases(tmp_path: Path):
+    golden = tmp_path / "golden"
+    write_case(golden / "test", "case-unknown", "unknown",
+               fix_check={"path": "*", "must_exist": False})
+    looping = FakeLLMClient(script=[[("get_pod_status", {"namespace": "prod", "pod": "p"})]] * 9)
+    record = TierAHarness(
+        golden_dir=golden, model="m", client=looping, split="test", repeats=1,
+        budget=Budget(max_steps=3),
+    ).run()[0]
+    assert record.agent_category is Category.UNKNOWN
+    assert record.error == "budget_exceeded: max_steps"
+    assert not record.category_correct
+    assert record.self_reported_confidence is None  # the model never gave an estimate
+
+
 def test_cost_budget_stops_the_investigation():
     backend = ReplayBackend({})
     client = FakeLLMClient(
@@ -202,7 +217,7 @@ def test_tool_error_is_reported_without_crashing():
 
 def test_llm_failure_is_recorded_not_raised():
     class ExplodingClient:
-        def chat(self, messages, tools, model):
+        def chat(self, messages, tools, model, **options):
             raise RuntimeError("provider outage")
 
     diagnosis, trace = Diagnostician(
@@ -240,7 +255,7 @@ def test_provider_errors_are_excluded_from_accuracy(tmp_path: Path):
     """An outage must not be scored as the agent answering wrongly."""
 
     class ExplodingClient:
-        def chat(self, messages, tools, model):
+        def chat(self, messages, tools, model, **options):
             raise RuntimeError("OpenRouter 402: insufficient credits")
 
     golden = build_golden(tmp_path)
@@ -263,7 +278,7 @@ def test_partial_outage_scores_only_the_runs_that_landed(tmp_path: Path):
     golden = build_golden(tmp_path)
 
     class FlakyClient(FakeLLMClient):
-        def chat(self, messages, tools, model):
+        def chat(self, messages, tools, model, **options):
             if len(self.seen_messages) >= 1:
                 raise RuntimeError("provider outage")
             return super().chat(messages, tools, model)

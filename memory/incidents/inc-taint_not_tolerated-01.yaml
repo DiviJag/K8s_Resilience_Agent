@@ -1,0 +1,19 @@
+incident_id: inc-taint_not_tolerated-01
+category: taint_not_tolerated
+symptom: Pending
+summary: PodPendingTooLong on analytics-worker in chaosloop-lab
+signals:
+- '0/3 nodes are available: 3 node(s) had untolerated taint(s). no new claims to deallocate,
+  preemption: 0/3 nodes are available: 3 Preemption is not helpful for scheduling.'
+- 'Unschedulable: 0/3 nodes are available: 3 node(s) had untolerated taint(s). no
+  new claims to deallocate, preemption: 0/3 nodes are available: 3 Preemption is not
+  helpful for scheduling.'
+root_cause: Both worker nodes carry the taint chaosloop=experiment:NoSchedule and
+  the pod has no matching toleration; the control-plane node is excluded by its usual
+  taint, so no node can run it.
+resolution: Corrected spec.template.spec.tolerations in the workload manifest.
+provenance:
+  source: golden
+  source_case_id: taint_not_tolerated-01
+  confirmed_by: claude (pending human review)
+  confirmed_at: '2026-10-01'

@@ -222,6 +222,16 @@ def test_logs_tolerate_a_container_that_never_restarted():
     assert "error" in str(logs["previous"])
 
 
+def test_byte_logs_are_decoded_not_repr_d():
+    class BytesCore(FakeCore):
+        def read_namespaced_pod_log(self, name, namespace, container, previous, tail_lines):
+            return b"[billing] boot\n[billing] FATAL config: DATABASE_URL is not set\n"
+
+    logs = LiveBackend(core_api=BytesCore(), apps_api=FakeApps()).get_logs("ns", "p")
+    assert logs["current"].splitlines()[1] == "[billing] FATAL config: DATABASE_URL is not set"
+    assert not logs["current"].startswith("b'")
+
+
 def test_logs_are_truncated():
     backend = LiveBackend(core_api=FakeCore(log_text="x" * 20_000), apps_api=FakeApps())
     assert "[truncated]" in backend.get_logs("chaosloop-lab", "p")["current"]
@@ -231,6 +241,28 @@ def test_events_are_redacted(backend: LiveBackend):
     events = backend.get_events("chaosloop-lab", "cart-service-abc")
     assert "abcdefghijklmnopqrst" not in events[0]["message"]
     assert events[0]["reason"] == "Failed"
+
+
+def test_events_include_owned_objects_but_not_neighbours():
+    """A quota failure exists only as a ReplicaSet event, so a deployment's events must
+    include its ReplicaSets' - without pulling in a similarly named neighbour's."""
+
+    def event(name: str, message: str) -> NS:
+        return NS(
+            type="Warning", reason="X", count=1, message=message, last_timestamp=STARTED,
+            event_time=None, involved_object=NS(name=name),
+        )
+
+    class Core(FakeCore):
+        def list_namespaced_event(self, namespace, field_selector=None):
+            return NS(items=[
+                event("cart-service-6d4f8797f6", "exceeded quota: pods=4"),
+                event("cart-service-6d4f8797f6-2lcfw", "pod event"),
+                event("cart-6b8d4f7c92-8kdnv", "a different workload"),
+            ])
+
+    events = LiveBackend(core_api=Core(), apps_api=FakeApps()).get_events("ns", "cart-service")
+    assert [e["message"] for e in events] == ["exceeded quota: pods=4", "pod event"]
 
 
 def test_deployment_projection_keeps_diagnostic_fields(backend: LiveBackend):

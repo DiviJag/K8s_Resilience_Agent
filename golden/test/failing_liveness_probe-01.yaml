@@ -1,0 +1,313 @@
+case_id: failing_liveness_probe-01
+split: test
+trigger:
+  alertname: PodCrashLooping
+  service: billing-service
+  namespace: chaosloop-lab
+  pod: billing-service-86d55dccb9-2cqhd
+  extra: {}
+evidence:
+  get_pod_status:
+    name: billing-service-86d55dccb9-2cqhd
+    namespace: chaosloop-lab
+    phase: Running
+    startTime: '2026-10-01T21:19:01+00:00'
+    nodeName: chaosloop-worker
+    conditions:
+    - type: PodReadyToStartContainers
+      status: 'True'
+      reason: null
+      message: null
+    - type: Initialized
+      status: 'True'
+      reason: null
+      message: null
+    - type: Ready
+      status: 'True'
+      reason: null
+      message: null
+    - type: ContainersReady
+      status: 'True'
+      reason: null
+      message: null
+    - type: PodScheduled
+      status: 'True'
+      reason: null
+      message: null
+    containerStatuses:
+    - name: billing
+      ready: true
+      restartCount: 1
+      image: localhost:5001/busybox:1.36
+      state:
+        running:
+          startedAt: '2026-10-01T21:19:42+00:00'
+      lastState:
+        terminated:
+          exitCode: 137
+          reason: Error
+          startedAt: '2026-10-01T21:19:02+00:00'
+          finishedAt: '2026-10-01T21:19:42+00:00'
+  get_events:
+  - type: Normal
+    reason: SuccessfulCreate
+    count: 1
+    message: 'Created pod: billing-service-86d55dccb9-2cqhd'
+    lastTimestamp: '2026-10-01T21:19:01+00:00'
+    involvedObject: billing-service-86d55dccb9
+  - type: Normal
+    reason: ScalingReplicaSet
+    count: 1
+    message: Scaled up replica set billing-service-86d55dccb9 from 0 to 1
+    lastTimestamp: '2026-10-01T21:19:01+00:00'
+    involvedObject: billing-service
+  - type: Normal
+    reason: Scheduled
+    count: null
+    message: Successfully assigned chaosloop-lab/billing-service-86d55dccb9-2cqhd
+      to chaosloop-worker
+    lastTimestamp: null
+    involvedObject: billing-service-86d55dccb9-2cqhd
+  - type: Normal
+    reason: Killing
+    count: 1
+    message: Stopping container billing
+    lastTimestamp: '2026-10-01T21:19:02+00:00'
+    involvedObject: billing-service-58669b9cd8-cfw8p
+  - type: Normal
+    reason: Killing
+    count: 1
+    message: Stopping container billing
+    lastTimestamp: '2026-10-01T21:19:02+00:00'
+    involvedObject: billing-service-58669b9cd8-z9gvj
+  - type: Normal
+    reason: SuccessfulDelete
+    count: 1
+    message: 'Deleted pod: billing-service-58669b9cd8-cfw8p'
+    lastTimestamp: '2026-10-01T21:19:02+00:00'
+    involvedObject: billing-service-58669b9cd8
+  - type: Normal
+    reason: SuccessfulDelete
+    count: 1
+    message: 'Deleted pod: billing-service-58669b9cd8-z9gvj'
+    lastTimestamp: '2026-10-01T21:19:02+00:00'
+    involvedObject: billing-service-58669b9cd8
+  - type: Normal
+    reason: SuccessfulCreate
+    count: 1
+    message: 'Created pod: billing-service-86d55dccb9-pjqsl'
+    lastTimestamp: '2026-10-01T21:19:02+00:00'
+    involvedObject: billing-service-86d55dccb9
+  - type: Normal
+    reason: ScalingReplicaSet
+    count: 1
+    message: Scaled down replica set billing-service-58669b9cd8 from 2 to 1
+    lastTimestamp: '2026-10-01T21:19:02+00:00'
+    involvedObject: billing-service
+  - type: Normal
+    reason: ScalingReplicaSet
+    count: 1
+    message: Scaled up replica set billing-service-86d55dccb9 from 1 to 2
+    lastTimestamp: '2026-10-01T21:19:02+00:00'
+    involvedObject: billing-service
+  - type: Normal
+    reason: ScalingReplicaSet
+    count: 1
+    message: Scaled down replica set billing-service-58669b9cd8 from 1 to 0
+    lastTimestamp: '2026-10-01T21:19:02+00:00'
+    involvedObject: billing-service
+  - type: Normal
+    reason: Scheduled
+    count: null
+    message: Successfully assigned chaosloop-lab/billing-service-86d55dccb9-pjqsl
+      to chaosloop-worker2
+    lastTimestamp: null
+    involvedObject: billing-service-86d55dccb9-pjqsl
+  - type: Normal
+    reason: Pulled
+    count: 2
+    message: Container image "localhost:5001/busybox:1.36" already present on machine
+      and can be accessed by the pod
+    lastTimestamp: '2026-10-01T21:19:37+00:00'
+    involvedObject: billing-service-86d55dccb9-pjqsl
+  - type: Normal
+    reason: Created
+    count: 2
+    message: Container created
+    lastTimestamp: '2026-10-01T21:19:37+00:00'
+    involvedObject: billing-service-86d55dccb9-pjqsl
+  - type: Normal
+    reason: Started
+    count: 2
+    message: Container started
+    lastTimestamp: '2026-10-01T21:19:37+00:00'
+    involvedObject: billing-service-86d55dccb9-pjqsl
+  - type: Normal
+    reason: Pulled
+    count: 2
+    message: Container image "localhost:5001/busybox:1.36" already present on machine
+      and can be accessed by the pod
+    lastTimestamp: '2026-10-01T21:19:42+00:00'
+    involvedObject: billing-service-86d55dccb9-2cqhd
+  - type: Normal
+    reason: Created
+    count: 2
+    message: Container created
+    lastTimestamp: '2026-10-01T21:19:42+00:00'
+    involvedObject: billing-service-86d55dccb9-2cqhd
+  - type: Normal
+    reason: Started
+    count: 2
+    message: Container started
+    lastTimestamp: '2026-10-01T21:19:42+00:00'
+    involvedObject: billing-service-86d55dccb9-2cqhd
+  - type: Warning
+    reason: Unhealthy
+    count: 2
+    message: 'Liveness probe failed: dial tcp 10.244.1.36:9999: connect: connection
+      refused'
+    lastTimestamp: '2026-10-01T21:19:42+00:00'
+    involvedObject: billing-service-86d55dccb9-pjqsl
+  - type: Normal
+    reason: Killing
+    count: 2
+    message: Container billing failed liveness probe, will be restarted
+    lastTimestamp: '2026-10-01T21:19:42+00:00'
+    involvedObject: billing-service-86d55dccb9-pjqsl
+  - type: Warning
+    reason: Unhealthy
+    count: 2
+    message: 'Liveness probe failed: dial tcp 10.244.2.47:9999: connect: connection
+      refused'
+    lastTimestamp: '2026-10-01T21:19:47+00:00'
+    involvedObject: billing-service-86d55dccb9-2cqhd
+  - type: Normal
+    reason: Killing
+    count: 2
+    message: Container billing failed liveness probe, will be restarted
+    lastTimestamp: '2026-10-01T21:19:47+00:00'
+    involvedObject: billing-service-86d55dccb9-2cqhd
+  get_logs:
+    current: '[billing] boot sequence start
+
+      [billing] listening on :8080 with 4 workers
+
+      '
+    previous: '[billing] boot sequence start
+
+      [billing] listening on :8080 with 4 workers
+
+      '
+  get_deployment_spec: 'error: ''V1Probe'' object has no attribute ''exec'''
+  get_service:
+    metadata:
+      name: billing-service
+      namespace: chaosloop-lab
+    spec:
+      type: ClusterIP
+      selector:
+        app: billing-service
+      ports:
+      - port: 80
+        targetPort: 8080
+        protocol: TCP
+        name: null
+  get_endpoints:
+    metadata:
+      name: billing-service
+      namespace: chaosloop-lab
+    subsets:
+    - addresses:
+      - ip: 10.244.1.36
+      - ip: 10.244.2.47
+      notReadyAddresses: []
+      ports:
+      - port: 8080
+        name: null
+  get_pvc_status: not available
+  get_node_status:
+  - name: chaosloop-control-plane
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-control-plane
+      kubernetes.io/os: linux
+      node-role.kubernetes.io/control-plane: ''
+      node.kubernetes.io/exclude-from-external-load-balancers: ''
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints:
+    - key: node-role.kubernetes.io/control-plane
+      value: null
+      effect: NoSchedule
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.95'
+      memory: 290Mi
+  - name: chaosloop-worker
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints: []
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.14'
+      memory: 130Mi
+  - name: chaosloop-worker2
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker2
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints: []
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.12'
+      memory: 82Mi
+expected:
+  category: failing_liveness_probe
+  root_cause: A liveness probe on TCP port 9999, where nothing listens, fails, so
+    the kubelet repeatedly kills an otherwise healthy billing container.
+  fix_check:
+    path: spec.template.spec.containers.livenessProbe
+    any_of: []
+    must_exist: true
+    equals: null
+metadata:
+  source: chaos
+  k8s_version: '1.30'
+  runtime: containerd
+  recorded: '2026-10-01'

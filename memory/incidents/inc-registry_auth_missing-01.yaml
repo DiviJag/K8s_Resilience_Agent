@@ -1,0 +1,20 @@
+incident_id: inc-registry_auth_missing-01
+category: registry_auth_missing
+symptom: ImagePullBackOff
+summary: PodImagePullBackOff on cart-service in chaosloop-lab
+signals:
+- '...private/cart:v1.0.0": failed to authorize: failed to fetch anonymous token:
+  unexpected status from GET request to https://ghcr.io/token?scope=repository%3Achaosloop-private%2Fcart%3Apull&service=ghcr.io:
+  403 Forbidden'
+- 'error: previous terminated container "cart" in pod "cart-service" not found'
+- 'error: container "cart" in pod "cart-service" is waiting to start: trying and failing
+  to pull image'
+- 'ContainersNotReady: containers with unready status: [cart]'
+root_cause: The deployment has no imagePullSecrets, so the kubelet pulls anonymously
+  from the private ghcr.io/chaosloop-private registry and is denied.
+resolution: Corrected spec.template.spec.imagePullSecrets in the workload manifest.
+provenance:
+  source: golden
+  source_case_id: registry_auth_missing-01
+  confirmed_by: claude (pending human review)
+  confirmed_at: '2026-10-01'

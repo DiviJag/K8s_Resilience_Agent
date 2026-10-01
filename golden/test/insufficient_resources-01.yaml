@@ -1,0 +1,237 @@
+case_id: insufficient_resources-01
+split: test
+trigger:
+  alertname: PodPendingTooLong
+  service: analytics-worker
+  namespace: chaosloop-lab
+  pod: analytics-worker-84bf45fc56-j44hz
+  extra: {}
+evidence:
+  get_pod_status:
+    name: analytics-worker-84bf45fc56-j44hz
+    namespace: chaosloop-lab
+    phase: Pending
+    startTime: null
+    nodeName: null
+    conditions:
+    - type: PodScheduled
+      status: 'False'
+      reason: Unschedulable
+      message: '0/3 nodes are available: 1 node(s) had untolerated taint(s), 2 Insufficient
+        memory. no new claims to deallocate, preemption: 0/3 nodes are available:
+        3 Preemption is not helpful for scheduling.'
+    containerStatuses: []
+  get_events:
+  - type: Normal
+    reason: SuccessfulCreate
+    count: 1
+    message: 'Created pod: analytics-worker-84bf45fc56-j44hz'
+    lastTimestamp: '2026-10-01T21:29:24+00:00'
+    involvedObject: analytics-worker-84bf45fc56
+  - type: Normal
+    reason: ScalingReplicaSet
+    count: 1
+    message: Scaled up replica set analytics-worker-84bf45fc56 from 0 to 1
+    lastTimestamp: '2026-10-01T21:29:24+00:00'
+    involvedObject: analytics-worker
+  - type: Warning
+    reason: FailedScheduling
+    count: null
+    message: '0/3 nodes are available: 1 node(s) had untolerated taint(s), 2 Insufficient
+      memory. no new claims to deallocate, preemption: 0/3 nodes are available: 3
+      Preemption is not helpful for scheduling.'
+    lastTimestamp: null
+    involvedObject: analytics-worker-84bf45fc56-j44hz
+  - type: Warning
+    reason: FailedScheduling
+    count: null
+    message: '0/3 nodes are available: 1 node(s) had untolerated taint(s), 2 Insufficient
+      memory. no new claims to deallocate, preemption: 0/3 nodes are available: 3
+      Preemption is not helpful for scheduling.'
+    lastTimestamp: null
+    involvedObject: analytics-worker-84bf45fc56-j44hz
+  get_logs:
+    current: null
+    previous: null
+  get_deployment_spec:
+    metadata:
+      name: analytics-worker
+      namespace: chaosloop-lab
+      generation: 2
+    spec:
+      replicas: 1
+      progressDeadlineSeconds: 600
+      strategy:
+        type: RollingUpdate
+      selector:
+        matchLabels:
+          app: analytics-worker
+      template:
+        metadata:
+          labels:
+            app: analytics-worker
+        spec:
+          nodeSelector: null
+          tolerations: []
+          imagePullSecrets: []
+          volumes:
+          - name: shm
+            emptyDir:
+              medium: Memory
+          containers:
+          - name: analytics
+            image: localhost:5001/busybox:1.36
+            command:
+            - /bin/sh
+            - -c
+            args:
+            - 'echo "[analytics] allocating ${ALLOC_MB}MB working set"
+
+              dd if=/dev/zero of=/dev/shm/workingset bs=1M count="$ALLOC_MB" 2>/dev/null
+
+              echo "[analytics] steady state"
+
+              while true; do sleep 5; done
+
+              '
+            ports: []
+            env:
+            - name: ALLOC_MB
+              value: '24'
+            envFrom: []
+            resources:
+              requests:
+                cpu: 10m
+                memory: 64Gi
+              limits:
+                memory: 64Gi
+            livenessProbe: null
+            readinessProbe: null
+            volumeMounts:
+            - name: shm
+              mountPath: /dev/shm
+    status:
+      replicas: 2
+      readyReplicas: 1
+      updatedReplicas: 1
+      unavailableReplicas: 1
+      conditions:
+      - type: Available
+        status: 'True'
+        reason: MinimumReplicasAvailable
+        message: Deployment has minimum availability.
+      - type: Progressing
+        status: 'True'
+        reason: ReplicaSetUpdated
+        message: ReplicaSet "analytics-worker-84bf45fc56" is progressing.
+  get_service:
+    metadata:
+      name: analytics-worker
+      namespace: chaosloop-lab
+    spec:
+      type: ClusterIP
+      selector:
+        app: analytics-worker
+      ports:
+      - port: 80
+        targetPort: 8080
+        protocol: TCP
+        name: null
+  get_endpoints:
+    metadata:
+      name: analytics-worker
+      namespace: chaosloop-lab
+    subsets:
+    - addresses:
+      - ip: 10.244.2.52
+      notReadyAddresses: []
+      ports:
+      - port: 8080
+        name: null
+  get_pvc_status: not available
+  get_node_status:
+  - name: chaosloop-control-plane
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-control-plane
+      kubernetes.io/os: linux
+      node-role.kubernetes.io/control-plane: ''
+      node.kubernetes.io/exclude-from-external-load-balancers: ''
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints:
+    - key: node-role.kubernetes.io/control-plane
+      value: null
+      effect: NoSchedule
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.95'
+      memory: 290Mi
+  - name: chaosloop-worker
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints: []
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.14'
+      memory: 130Mi
+  - name: chaosloop-worker2
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker2
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints: []
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.12'
+      memory: 82Mi
+expected:
+  category: insufficient_resources
+  root_cause: analytics-worker requests 64Gi of memory, more than any node can allocate,
+    so the scheduler cannot place it.
+  fix_check:
+    path: spec.template.spec.containers.resources.requests.memory
+    any_of: []
+    must_exist: true
+    equals: null
+metadata:
+  source: chaos
+  k8s_version: '1.30'
+  runtime: containerd
+  recorded: '2026-10-01'

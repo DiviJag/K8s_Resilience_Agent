@@ -95,6 +95,28 @@ def test_grade_fix_equals():
     )
 
 
+def test_any_of_accepts_each_legitimate_fix():
+    check = FixCheck(
+        path="spec.storageClassName", any_of=["spec.template.spec.volumes"], must_exist=True
+    )
+    on_claim = make_diagnosis(Category.PVC_UNBOUND, "spec.storageClassName: standard")
+    on_pod = make_diagnosis(
+        Category.PVC_UNBOUND,
+        "spec.template.spec.volumes[0].persistentVolumeClaim.claimName: reporting-data",
+    )
+    elsewhere = make_diagnosis(Category.PVC_UNBOUND, "spec.replicas: 0")
+    assert grade_fix(on_claim, check)
+    assert grade_fix(on_pod, check)
+    assert not grade_fix(elsewhere, check)
+
+
+def test_any_of_with_must_not_exist_forbids_every_path():
+    check = FixCheck(path="spec.template.spec.containers.image", any_of=["spec.replicas"],
+                     must_exist=False)
+    assert not grade_fix(make_diagnosis(Category.REGISTRY_UNREACHABLE, "spec.replicas: 0"), check)
+    assert grade_fix(make_diagnosis(Category.REGISTRY_UNREACHABLE, ""), check)
+
+
 def test_no_fault_abstention_is_not_a_false_positive():
     assert not grade_false_positive(Category.NO_FAULT, Category.NO_FAULT)
     assert not grade_false_positive(Category.NO_FAULT, Category.UNKNOWN)
@@ -126,6 +148,18 @@ def test_grade_case_symptom_answer_is_wrong():
         make_diagnosis(Category.UNKNOWN, ""), expected(Category.REGISTRY_AUTH_MISSING)
     )
     assert not result.category_correct and not result.fix_correct
+
+
+def test_running_out_of_budget_is_not_a_correct_abstention():
+    """The budget fallback says `unknown`; on an `unknown` case it must still score zero."""
+    fallback = make_diagnosis(Category.UNKNOWN, "")
+    check = Expected(
+        category=Category.UNKNOWN, root_cause="rc", fix_check=FixCheck(path="*", must_exist=False)
+    )
+    assert grade_case(fallback, check).category_correct
+    result = grade_case(fallback, check, budget_exhausted=True)
+    assert not result.category_correct and not result.fix_correct
+    assert not result.malformed and not result.is_false_positive
 
 
 def test_malformed_response_fails_every_axis():

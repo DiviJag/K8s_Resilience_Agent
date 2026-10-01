@@ -1,0 +1,18 @@
+incident_id: inc-readiness_probe_misconfigured-01
+category: readiness_probe_misconfigured
+symptom: ProbeFailure
+summary: PodNotReady on reporting-service in chaosloop-lab
+signals:
+- 'Readiness probe failed: dial tcp 10.244.2.42:9999: connect: connection refused'
+- 'error: previous terminated container "reporting" in pod "reporting-service" not
+  found'
+- 'ContainersNotReady: containers with unready status: [reporting]'
+root_cause: The reporting readiness probe checks TCP port 9999, but the container
+  listens on 8080, so the pod never becomes Ready and the Service sends it no traffic.
+resolution: Corrected spec.template.spec.containers.readinessProbe in the workload
+  manifest.
+provenance:
+  source: golden
+  source_case_id: readiness_probe_misconfigured-01
+  confirmed_by: claude (pending human review)
+  confirmed_at: '2026-10-01'

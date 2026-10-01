@@ -1,0 +1,21 @@
+incident_id: inc-imagepull-registry-unreachable-01
+category: registry_unreachable
+symptom: ImagePullBackOff
+summary: PodImagePullBackOff on search-service in prod
+signals:
+- '...Unknown desc = failed to resolve reference "registry.local/search:v3.1.0": failed
+  to do request: Head "https://registry.local/v2/search/manifests/v3.1.0": dial tcp:
+  lookup registry.local on 10.96.0.10:53: no such host'
+- 'Error from server (BadRequest): container "search" in pod "search-service" is waiting
+  to start: trying and failing to pull image'
+- 'ImagePullBackOff: Back-off pulling image "registry.local/search:v3.1.0"'
+root_cause: The registry hostname registry.local does not resolve from the nodes,
+  so the kubelet never reaches the registry. The deployment spec itself - tag and
+  pull secret - is correct.
+resolution: Fixed outside the workload; spec.template.spec.containers.image was left
+  unchanged.
+provenance:
+  source: golden
+  source_case_id: imagepull-registry-unreachable-01
+  confirmed_by: claude (pending human review)
+  confirmed_at: '2026-10-01'

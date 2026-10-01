@@ -1,0 +1,18 @@
+incident_id: inc-crashloop-unknown-panic-01
+category: unknown
+symptom: SteadyState
+summary: PodCrashLooping on invoice-renderer in prod
+signals:
+- Back-off restarting failed container renderer in pod invoice-renderer-6c7d9b8f53-r4dzx_prod
+- 'panic: runtime error: index out of range [3] with length 3'
+- 'CrashLoopBackOff: back-off 5m0s restarting failed container=renderer pod=invoice-renderer-6c7d9b8f53-r4dzx_prod'
+- terminated Error exitCode=2
+root_cause: The renderer panics with an index-out-of-range bug while processing a
+  queued job; its configuration, image and resources have not changed in weeks. This
+  is an application defect triggered by data, which no category in the taxonomy describes.
+resolution: No change made; the condition had already cleared on its own.
+provenance:
+  source: golden
+  source_case_id: crashloop-unknown-panic-01
+  confirmed_by: claude (pending human review)
+  confirmed_at: '2026-10-01'

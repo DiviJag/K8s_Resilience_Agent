@@ -27,12 +27,16 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           CHAOSLOOP_MODEL: ${{ vars.CHAOSLOOP_MODEL }}
-        run: >
-          uv run chaosloop-eval run
-          --split ${{ inputs.split || 'test' }}
-          --repeats ${{ inputs.repeats || 3 }}
+          CHAOSLOOP_JUDGE_MODEL: ${{ vars.CHAOSLOOP_JUDGE_MODEL }}
+        run: |
+          args="--split ${{ inputs.split || 'test' }} --repeats ${{ inputs.repeats || 3 }}"
+          # The calibrator is fit on dev results and committed; apply it whenever it exists.
+          if [ -f calibration/isotonic.json ]; then
+            args="$args --calibrator calibration/isotonic.json"
+          fi
+          uv run chaosloop-eval run $args
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: eval-run
-          path: eval/runs/*.jsonl
+          path: eval/runs/

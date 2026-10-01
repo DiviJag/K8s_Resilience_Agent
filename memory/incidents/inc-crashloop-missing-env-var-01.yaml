@@ -1,0 +1,20 @@
+incident_id: inc-crashloop-missing-env-var-01
+category: missing_env_var
+symptom: CrashLoopBackOff
+summary: PodCrashLooping on billing-service in prod
+signals:
+- Back-off restarting failed container billing in pod billing-service-6b8d4f7c92-8kdnv_prod
+- '2026-09-29T14:21:03Z FATAL config: required environment variable DATABASE_URL is
+  not set'
+- raise KeyError(name)
+- 'KeyError: ''DATABASE_URL'''
+- 'CrashLoopBackOff: back-off 5m0s restarting failed container=billing pod=billing-service-6b8d4f7c92-8kdnv_prod'
+- terminated Error exitCode=1
+root_cause: 'The container exits at startup because DATABASE_URL is not provided:
+  neither the env list nor the billing-config ConfigMap supplies it.'
+resolution: Corrected spec.template.spec.containers.env in the workload manifest.
+provenance:
+  source: golden
+  source_case_id: crashloop-missing-env-var-01
+  confirmed_by: claude (pending human review)
+  confirmed_at: '2026-10-01'

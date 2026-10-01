@@ -1,0 +1,19 @@
+incident_id: inc-imagepull-tag-not-found-01
+category: image_tag_not_found
+symptom: ImagePullBackOff
+summary: PodImagePullBackOff on checkout-service in prod
+signals:
+- '...= failed to pull and unpack image "registry.internal:5000/checkout:v2.4.11":
+  failed to resolve reference "registry.internal:5000/checkout:v2.4.11": registry.internal:5000/checkout:v2.4.11:
+  not found: manifest unknown'
+- 'Error from server (BadRequest): container "checkout" in pod "checkout-service"
+  is waiting to start: trying and failing to pull image'
+- 'ImagePullBackOff: Back-off pulling image "registry.internal:5000/checkout:v2.4.11"'
+root_cause: The deployment was rolled out with image tag v2.4.11, which does not exist
+  in registry.internal:5000 - the registry resolves the reference to manifest unknown.
+resolution: Corrected spec.template.spec.containers.image in the workload manifest.
+provenance:
+  source: golden
+  source_case_id: imagepull-tag-not-found-01
+  confirmed_by: claude (pending human review)
+  confirmed_at: '2026-10-01'

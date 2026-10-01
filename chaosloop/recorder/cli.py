@@ -41,6 +41,9 @@ def capture(
     case_id: Annotated[str, typer.Option(help="Defaults to <category>-<n>")] = "",
     split: Annotated[str, typer.Option(help="dev or test")] = "dev",
     fix_must_exist: bool = True,
+    fix_any_of: Annotated[
+        list[str] | None, typer.Option(help="Another equally correct fix path; repeatable")
+    ] = None,
     pvc: str = "",
     context: str = "kind-chaosloop",
     out_dir: Path = Path("golden"),
@@ -75,7 +78,9 @@ def capture(
         expected=Expected(
             category=Category(category),
             root_cause=root_cause,
-            fix_check=FixCheck(path=fix_path, must_exist=fix_must_exist),
+            fix_check=FixCheck(
+                path=fix_path, any_of=fix_any_of or [], must_exist=fix_must_exist
+            ),
         ),
         metadata=CaseMetadata(
             source="chaos", k8s_version=k8s_version, runtime="containerd", recorded=date.today()

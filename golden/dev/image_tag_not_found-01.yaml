@@ -1,0 +1,279 @@
+case_id: image_tag_not_found-01
+split: dev
+trigger:
+  alertname: PodImagePullBackOff
+  service: cart-service
+  namespace: chaosloop-lab
+  pod: cart-service-f6447cfd4-xfwf9
+  extra: {}
+evidence:
+  get_pod_status:
+    name: cart-service-f6447cfd4-xfwf9
+    namespace: chaosloop-lab
+    phase: Pending
+    startTime: '2026-10-01T21:15:18+00:00'
+    nodeName: chaosloop-worker
+    conditions:
+    - type: PodReadyToStartContainers
+      status: 'True'
+      reason: null
+      message: null
+    - type: Initialized
+      status: 'True'
+      reason: null
+      message: null
+    - type: Ready
+      status: 'False'
+      reason: ContainersNotReady
+      message: 'containers with unready status: [cart]'
+    - type: ContainersReady
+      status: 'False'
+      reason: ContainersNotReady
+      message: 'containers with unready status: [cart]'
+    - type: PodScheduled
+      status: 'True'
+      reason: null
+      message: null
+    containerStatuses:
+    - name: cart
+      ready: false
+      restartCount: 0
+      image: localhost:5001/cart:v9.9.9
+      state:
+        waiting:
+          reason: ErrImagePull
+          message: 'rpc error: code = NotFound desc = failed to pull and unpack image
+            "localhost:5001/cart:v9.9.9": failed to resolve reference "localhost:5001/cart:v9.9.9":
+            localhost:5001/cart:v9.9.9: not found'
+      lastState: null
+  get_events:
+  - type: Normal
+    reason: ScalingReplicaSet
+    count: 1
+    message: Scaled up replica set cart-service-f6447cfd4 from 0 to 1
+    lastTimestamp: '2026-10-01T21:15:17+00:00'
+    involvedObject: cart-service
+  - type: Normal
+    reason: Pulling
+    count: 1
+    message: Pulling image "localhost:5001/cart:v9.9.9"
+    lastTimestamp: '2026-10-01T21:15:18+00:00'
+    involvedObject: cart-service-f6447cfd4-xfwf9
+  - type: Warning
+    reason: Failed
+    count: 1
+    message: 'Failed to pull image "localhost:5001/cart:v9.9.9": rpc error: code =
+      NotFound desc = failed to pull and unpack image "localhost:5001/cart:v9.9.9":
+      failed to resolve reference "localhost:5001/cart:v9.9.9": localhost:5001/cart:v9.9.9:
+      not found'
+    lastTimestamp: '2026-10-01T21:15:18+00:00'
+    involvedObject: cart-service-f6447cfd4-xfwf9
+  - type: Warning
+    reason: Failed
+    count: 1
+    message: 'Error: ErrImagePull'
+    lastTimestamp: '2026-10-01T21:15:18+00:00'
+    involvedObject: cart-service-f6447cfd4-xfwf9
+  - type: Normal
+    reason: SuccessfulCreate
+    count: 1
+    message: 'Created pod: cart-service-f6447cfd4-xfwf9'
+    lastTimestamp: '2026-10-01T21:15:18+00:00'
+    involvedObject: cart-service-f6447cfd4
+  - type: Normal
+    reason: Scheduled
+    count: null
+    message: Successfully assigned chaosloop-lab/cart-service-f6447cfd4-xfwf9 to chaosloop-worker
+    lastTimestamp: null
+    involvedObject: cart-service-f6447cfd4-xfwf9
+  - type: Normal
+    reason: BackOff
+    count: 1
+    message: Back-off pulling image "localhost:5001/cart:v9.9.9"
+    lastTimestamp: '2026-10-01T21:15:19+00:00'
+    involvedObject: cart-service-f6447cfd4-xfwf9
+  - type: Warning
+    reason: Failed
+    count: 1
+    message: 'Error: ImagePullBackOff'
+    lastTimestamp: '2026-10-01T21:15:19+00:00'
+    involvedObject: cart-service-f6447cfd4-xfwf9
+  get_logs:
+    current: 'error: container "cart" in pod "cart-service-f6447cfd4-xfwf9" is waiting
+      to start: image can''t be pulled'
+    previous: 'error: previous terminated container "cart" in pod "cart-service-f6447cfd4-xfwf9"
+      not found'
+  get_deployment_spec:
+    metadata:
+      name: cart-service
+      namespace: chaosloop-lab
+      generation: 2
+    spec:
+      replicas: 2
+      progressDeadlineSeconds: 600
+      strategy:
+        type: RollingUpdate
+      selector:
+        matchLabels:
+          app: cart-service
+      template:
+        metadata:
+          labels:
+            app: cart-service
+        spec:
+          nodeSelector: null
+          tolerations: []
+          imagePullSecrets: []
+          volumes: []
+          containers:
+          - name: cart
+            image: localhost:5001/cart:v9.9.9
+            command:
+            - /bin/sh
+            - -c
+            args:
+            - 'echo "[cart] listening on :8080"
+
+              while true; do sleep 5; done
+
+              '
+            ports:
+            - containerPort: 8080
+            env: []
+            envFrom: []
+            resources:
+              requests:
+                cpu: 10m
+                memory: 16Mi
+              limits:
+                memory: 64Mi
+            livenessProbe: null
+            readinessProbe: null
+            volumeMounts: []
+    status:
+      replicas: 3
+      readyReplicas: 2
+      updatedReplicas: 1
+      unavailableReplicas: 1
+      conditions:
+      - type: Available
+        status: 'True'
+        reason: MinimumReplicasAvailable
+        message: Deployment has minimum availability.
+      - type: Progressing
+        status: 'True'
+        reason: ReplicaSetUpdated
+        message: ReplicaSet "cart-service-f6447cfd4" is progressing.
+  get_service:
+    metadata:
+      name: cart-service
+      namespace: chaosloop-lab
+    spec:
+      type: ClusterIP
+      selector:
+        app: cart-service
+      ports:
+      - port: 80
+        targetPort: 8080
+        protocol: TCP
+        name: null
+  get_endpoints:
+    metadata:
+      name: cart-service
+      namespace: chaosloop-lab
+    subsets:
+    - addresses:
+      - ip: 10.244.1.22
+      - ip: 10.244.2.30
+      notReadyAddresses:
+      - ip: 10.244.2.32
+      ports:
+      - port: 8080
+        name: null
+  get_pvc_status: not available
+  get_node_status:
+  - name: chaosloop-control-plane
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-control-plane
+      kubernetes.io/os: linux
+      node-role.kubernetes.io/control-plane: ''
+      node.kubernetes.io/exclude-from-external-load-balancers: ''
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints:
+    - key: node-role.kubernetes.io/control-plane
+      value: null
+      effect: NoSchedule
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.95'
+      memory: 290Mi
+  - name: chaosloop-worker
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints: []
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.14'
+      memory: 114Mi
+  - name: chaosloop-worker2
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker2
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints: []
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.13'
+      memory: 114Mi
+expected:
+  category: image_tag_not_found
+  root_cause: The cart deployment references image tag v9.9.9, which was never pushed
+    to the local registry, so the registry reports it as not found.
+  fix_check:
+    path: spec.template.spec.containers.image
+    any_of: []
+    must_exist: true
+    equals: null
+metadata:
+  source: chaos
+  k8s_version: '1.30'
+  runtime: containerd
+  recorded: '2026-10-01'

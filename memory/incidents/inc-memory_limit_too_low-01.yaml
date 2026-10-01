@@ -1,0 +1,21 @@
+incident_id: inc-memory_limit_too_low-01
+category: memory_limit_too_low
+symptom: OOMKilled
+summary: PodOOMKilled on analytics-worker in chaosloop-lab
+signals:
+- 'Error: failed to create containerd task: failed to create shim task: OCI runtime
+  create failed: runc create failed: unable to start container process: container
+  init was OOM-killed (memory limit too low?)'
+- Back-off restarting failed container analytics in pod analytics-worker-7b885d7f8f-zhdsz_chaosloop-lab(c0623382-9929-45dc-ad8a-26ef48bb7666)
+- 'CrashLoopBackOff: back-off 20s restarting failed container=analytics pod=analytics-worker-7b885d7f8f-zhdsz_chaosloop-lab(c0623382-9929-45dc-ad8a-26ef48bb7666)'
+- terminated StartError exitCode=128
+- 'ContainersNotReady: containers with unready status: [analytics]'
+root_cause: analytics-worker now fills a 256MB working set (ALLOC_MB=256) in memory-backed
+  storage, far over its 96Mi memory limit, so the kernel OOM-kills it at startup.
+resolution: Corrected spec.template.spec.containers.resources.limits.memory in the
+  workload manifest.
+provenance:
+  source: golden
+  source_case_id: memory_limit_too_low-01
+  confirmed_by: claude (pending human review)
+  confirmed_at: '2026-10-01'

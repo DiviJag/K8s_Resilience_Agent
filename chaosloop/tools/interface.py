@@ -5,6 +5,7 @@ Agent code is identical in Tier A and Tier B; only the backend behind this ABC c
 the Recorder's evidence keys, and ReplayBackend's lookups - keeping all three in lockstep.
 """
 
+import re
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -115,6 +116,18 @@ TOOL_SPECS: list[dict[str, Any]] = [
 
 class UnknownToolError(ValueError):
     pass
+
+
+# ReplicaSets are named <deployment>-<hash>, pods <replicaset>-<5 chars>, StatefulSet pods
+# <set>-<ordinal>. Requiring that shape, not just a prefix, stops a workload called "cart" from
+# claiming events that belong to "cart-service".
+_OWNED_SUFFIX = re.compile(r"-(?:[a-z0-9]{5,10}(?:-[a-z0-9]{5})?|\d+)")
+
+
+def owned_by(name: str, owner: str) -> bool:
+    if name == owner:
+        return True
+    return name.startswith(owner) and bool(_OWNED_SUFFIX.fullmatch(name[len(owner) :]))
 
 
 class ToolBackend(ABC):

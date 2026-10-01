@@ -1,0 +1,19 @@
+incident_id: inc-imagepull-auth-missing-01
+category: registry_auth_missing
+symptom: ImagePullBackOff
+summary: PodImagePullBackOff on payment-service in prod
+signals:
+- '...ayment:v1.8.2": failed to resolve reference "registry.internal:5000/payment:v1.8.2":
+  pull access denied, repository does not exist or may require authorization: server
+  message: insufficient_scope: authorization failed'
+- 'Error from server (BadRequest): container "payment" in pod "payment-service" is
+  waiting to start: image can''t be pulled'
+- 'ImagePullBackOff: Back-off pulling image "registry.internal:5000/payment:v1.8.2"'
+root_cause: The pod spec has no imagePullSecrets, so the kubelet pulls anonymously
+  from the private registry registry.internal:5000, which denies access.
+resolution: Corrected spec.template.spec.imagePullSecrets in the workload manifest.
+provenance:
+  source: golden
+  source_case_id: imagepull-auth-missing-01
+  confirmed_by: claude (pending human review)
+  confirmed_at: '2026-10-01'

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Runs - ChaosLoop{% endblock %}
+{% block content %}
+<h1>Eval runs</h1>
+<p class="lede">Each run replays the golden set through the agent and grades every answer. Reported numbers come from the test split; dev is for tuning.</p>
+
+{% if runs %}
+<section class="card">
+  <h2>Compare two runs</h2>
+  <form class="compare-form" action="{{ url_for('compare_page') }}" method="get">
+    <label>Baseline
+      <select name="baseline">
+        {% for run in runs %}<option value="{{ run.run_id }}" {% if loop.index == 2 %}selected{% endif %}>{{ run.run_id }} ({{ run.split_label }}, memory {{ "on" if run.memory_snapshot else "off" }})</option>{% endfor %}
+      </select>
+    </label>
+    <label>Candidate
+      <select name="candidate">
+        {% for run in runs %}<option value="{{ run.run_id }}" {% if loop.first %}selected{% endif %}>{{ run.run_id }} ({{ run.split_label }}, memory {{ "on" if run.memory_snapshot else "off" }})</option>{% endfor %}
+      </select>
+    </label>
+    <button class="button" type="submit">Compare</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>All runs</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Run</th><th>Split</th><th>Memory</th><th>Confidence</th>
+          <th class="num">Cases</th><th class="num">Runs</th>
+          <th class="num">Category</th><th class="num">Fix</th><th class="num">Root cause</th>
+          <th class="num">ECE</th><th class="num">$ / case</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in runs %}
+        {% set m = run.metrics %}
+        <tr>
+          <td><a href="{{ url_for('run_page', run_id=run.run_id) }}">{{ run.run_id }}</a></td>
+          <td>{% for split in run.splits %}<span class="chip split-{{ split }}">{{ split }}</span> {% else %}<span class="muted">-</span>{% endfor %}</td>
+          <td>{% if run.memory_snapshot %}<span class="chip memory-on">on</span>{% else %}<span class="muted">off</span>{% endif %}</td>
+          <td class="subtle">{{ "self-consistency" if run.sampled else "self-reported" }}</td>
+          <td class="num">{{ m.n_cases }}</td>
+          <td class="num">{{ m.n_runs }}</td>
+          <td class="num">{{ (m.category_accuracy if m.n_scored else none) | pct }}</td>
+          <td class="num">{{ (m.fix_accuracy if m.n_scored else none) | pct }}</td>
+          <td class="num">{{ m.root_cause_score | num }}</td>
+          <td class="num">{{ (m.calibration.system.ece if m.calibration.system else none) | num(3) }}</td>
+          <td class="num">{{ m.mean_cost_usd | num(3) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% else %}
+<div class="banner info"><span class="icon">i</span><span>No runs yet. Run <code>uv run chaosloop-eval run --split dev</code> and refresh.</span></div>
+{% endif %}
+{% endblock %}

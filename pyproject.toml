@@ -9,14 +9,19 @@ dependencies = [
     "httpx>=0.27",
     "typer>=0.12",
     "python-dotenv>=1.0",
+    # Core rather than an extra: LiveBackend is the production path, and a plain `uv sync`
+    # silently uninstalls extras it was not asked for, breaking the Recorder mid-session.
+    "kubernetes>=31.0",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "jinja2>=3.1",
 ]
-
-[project.optional-dependencies]
-live = ["kubernetes>=31.0"]
 
 [project.scripts]
 chaosloop-eval = "chaosloop.eval.cli:app"
 chaosloop-record = "chaosloop.recorder.cli:app"
+chaosloop-memory = "chaosloop.memory.cli:app"
+chaosloop-dashboard = "chaosloop.dashboard.cli:app"
 
 [dependency-groups]
 dev = [

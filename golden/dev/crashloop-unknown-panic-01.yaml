@@ -1,0 +1,110 @@
+case_id: crashloop-unknown-panic-01
+split: dev
+trigger:
+  alertname: PodCrashLooping
+  service: invoice-renderer
+  namespace: prod
+  pod: invoice-renderer-6c7d9b8f53-r4dzx
+evidence:
+  get_pod_status:
+    name: invoice-renderer-6c7d9b8f53-r4dzx
+    namespace: prod
+    phase: Running
+    startTime: "2026-09-30T11:05:17Z"
+    containerStatuses:
+      - name: renderer
+        ready: false
+        restartCount: 11
+        image: "registry.internal:5000/invoice-renderer:v1.9.4"
+        state:
+          waiting:
+            reason: CrashLoopBackOff
+            message: "back-off 5m0s restarting failed container=renderer pod=invoice-renderer-6c7d9b8f53-r4dzx_prod"
+        lastState:
+          terminated:
+            exitCode: 2
+            reason: Error
+            startedAt: "2026-09-30T12:20:03Z"
+            finishedAt: "2026-09-30T12:20:09Z"
+  get_events:
+    - type: Warning
+      reason: BackOff
+      count: 44
+      message: "Back-off restarting failed container renderer in pod invoice-renderer-6c7d9b8f53-r4dzx_prod"
+  get_logs:
+    current: ""
+    previous: |
+      2026/09/30 12:20:03 invoice-renderer v1.9.4 listening on :8080
+      2026/09/30 12:20:04 resuming render queue (2214 pending)
+      panic: runtime error: index out of range [3] with length 3
+
+      goroutine 41 [running]:
+      main.renderLineItems(0xc0001a2000, 0x3)
+              /src/render.go:118 +0x2b4
+      main.(*Worker).process(0xc000120000, {0xc0002de480, 0x24})
+              /src/worker.go:77 +0x1c5
+      created by main.startWorkers in goroutine 1
+              /src/worker.go:41 +0x85
+  get_deployment_spec:
+    metadata:
+      name: invoice-renderer
+      namespace: prod
+      generation: 6
+    spec:
+      replicas: 2
+      selector:
+        matchLabels: {app: invoice-renderer}
+      template:
+        metadata:
+          labels: {app: invoice-renderer}
+        spec:
+          imagePullSecrets:
+            - name: regcred
+          containers:
+            - name: renderer
+              image: "registry.internal:5000/invoice-renderer:v1.9.4"
+              ports: [{containerPort: 8080}]
+              env:
+                - {name: QUEUE_URL, value: "amqp://rabbitmq.prod.svc.cluster.local:5672"}
+                - {name: TEMPLATE_DIR, value: /templates}
+              resources:
+                requests: {cpu: 250m, memory: 256Mi}
+                limits: {memory: 512Mi}
+    status:
+      replicas: 2
+      readyReplicas: 0
+      updatedReplicas: 2
+      unavailableReplicas: 2
+      conditions:
+        - type: Progressing
+          status: "True"
+          reason: NewReplicaSetAvailable
+          lastUpdateTime: "2026-09-02T09:14:30Z"
+  get_service:
+    metadata: {name: invoice-renderer, namespace: prod}
+    spec:
+      selector: {app: invoice-renderer}
+      ports: [{port: 80, targetPort: 8080, protocol: TCP}]
+  get_endpoints:
+    metadata: {name: invoice-renderer, namespace: prod}
+    subsets:
+      - notReadyAddresses: [{ip: 10.244.2.27}, {ip: 10.244.1.58}]
+        ports: [{port: 8080}]
+  get_pvc_status: not available
+  get_node_status:
+    - name: kind-worker2
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+expected:
+  category: unknown
+  root_cause: "The renderer panics with an index-out-of-range bug while processing a queued job; its configuration, image and resources have not changed in weeks. This is an application defect triggered by data, which no category in the taxonomy describes."
+  fix_check:
+    path: "*"
+    must_exist: false
+metadata:
+  source: manual
+  k8s_version: "1.30"
+  runtime: containerd
+  recorded: 2026-10-01
+  note: "Abstention case in the dev split: the cause is visible, but it is a code bug, not a cluster or configuration fault."

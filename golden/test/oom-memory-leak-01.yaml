@@ -1,0 +1,103 @@
+case_id: oom-memory-leak-01
+split: test
+trigger:
+  alertname: PodOOMKilled
+  service: report-builder
+  namespace: prod
+  pod: report-builder-6f9d8c7b43-lw5kx
+evidence:
+  get_pod_status:
+    name: report-builder-6f9d8c7b43-lw5kx
+    namespace: prod
+    phase: Running
+    startTime: "2026-09-28T07:58:30Z"
+    containerStatuses:
+      - name: report-builder
+        ready: true
+        restartCount: 4
+        image: "registry.internal:5000/report-builder:v2.11.0"
+        state:
+          running:
+            startedAt: "2026-09-30T19:41:09Z"
+        lastState:
+          terminated:
+            exitCode: 137
+            reason: OOMKilled
+            startedAt: "2026-09-30T08:02:11Z"
+            finishedAt: "2026-09-30T19:41:05Z"
+  get_events:
+    - type: Normal
+      reason: Pulled
+      count: 5
+      message: 'Container image "registry.internal:5000/report-builder:v2.11.0" already present on machine'
+    - type: Normal
+      reason: Started
+      count: 5
+      message: "Started container report-builder"
+  get_logs:
+    current: |
+      2026-09-30T19:41:10Z INFO  report-builder v2.11.0 up, cache=lru(capacity=unbounded)
+      2026-09-30T20:00:00Z INFO  heap_inuse=188MiB cached_reports=1904
+    previous: |
+      2026-09-30T08:02:11Z INFO  report-builder v2.11.0 up, cache=lru(capacity=unbounded)
+      2026-09-30T10:00:00Z INFO  heap_inuse=412MiB cached_reports=18211
+      2026-09-30T13:00:00Z INFO  heap_inuse=903MiB cached_reports=40388
+      2026-09-30T16:00:00Z INFO  heap_inuse=1.31GiB cached_reports=61950
+      2026-09-30T19:00:00Z INFO  heap_inuse=1.72GiB cached_reports=83112
+      2026-09-30T19:40:51Z WARN  gc: heap close to limit, collection reclaimed 0.4%
+  get_deployment_spec:
+    metadata:
+      name: report-builder
+      namespace: prod
+      generation: 12
+    spec:
+      replicas: 1
+      selector:
+        matchLabels: {app: report-builder}
+      template:
+        metadata:
+          labels: {app: report-builder}
+        spec:
+          imagePullSecrets:
+            - name: regcred
+          containers:
+            - name: report-builder
+              image: "registry.internal:5000/report-builder:v2.11.0"
+              ports: [{containerPort: 8080}]
+              resources:
+                requests: {cpu: 500m, memory: 1Gi}
+                limits: {memory: 2Gi}
+    status:
+      replicas: 1
+      readyReplicas: 1
+      updatedReplicas: 1
+      unavailableReplicas: 0
+  get_service:
+    metadata: {name: report-builder, namespace: prod}
+    spec:
+      selector: {app: report-builder}
+      ports: [{port: 80, targetPort: 8080, protocol: TCP}]
+  get_endpoints:
+    metadata: {name: report-builder, namespace: prod}
+    subsets:
+      - addresses: [{ip: 10.244.2.70}]
+        ports: [{port: 8080}]
+  get_pvc_status: not available
+  get_node_status:
+    - name: kind-worker2
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+      allocatedRequests: {cpu: 1400m, memory: 2560Mi}
+expected:
+  category: memory_leak
+  root_cause: "report-builder runs for about 11 hours between OOM kills while its heap grows steadily with an unbounded report cache, so memory use climbs until it hits the 2Gi limit. The limit is not too low; the application leaks."
+  fix_check:
+    path: "*"
+    must_exist: false
+metadata:
+  source: manual
+  k8s_version: "1.30"
+  runtime: containerd
+  recorded: 2026-10-01
+  note: "Discriminates memory_leak from memory_limit_too_low on run duration and heap growth. The fix is in the application, so a correct diagnosis proposes no manifest patch."
