@@ -1,0 +1,109 @@
+case_id: imagepull-auth-missing-02
+split: test
+trigger:
+  alertname: PodImagePullBackOff
+  service: orders-service
+  namespace: prod
+  pod: orders-service-58c7d4f9b6-w9xq2
+evidence:
+  get_pod_status:
+    name: orders-service-58c7d4f9b6-w9xq2
+    namespace: prod
+    phase: Pending
+    startTime: "2026-09-25T08:40:11Z"
+    containerStatuses:
+      - name: orders
+        ready: false
+        restartCount: 0
+        image: "ghcr.io/acme/orders:2026.09.4"
+        state:
+          waiting:
+            reason: ImagePullBackOff
+            message: 'Back-off pulling image "ghcr.io/acme/orders:2026.09.4"'
+  get_events:
+    - type: Normal
+      reason: Scheduled
+      count: 1
+      message: "Successfully assigned prod/orders-service-58c7d4f9b6-w9xq2 to kind-worker2"
+    - type: Normal
+      reason: Pulling
+      count: 4
+      message: 'Pulling image "ghcr.io/acme/orders:2026.09.4"'
+    - type: Warning
+      reason: Failed
+      count: 4
+      message: 'Failed to pull image "ghcr.io/acme/orders:2026.09.4": rpc error: code = Unknown desc = failed to resolve reference "ghcr.io/acme/orders:2026.09.4": pull access denied, repository does not exist or may require authorization: server message: denied: requested access to the resource is denied, authentication required'
+    - type: Warning
+      reason: Failed
+      count: 4
+      message: "Error: ErrImagePull"
+    - type: Normal
+      reason: BackOff
+      count: 13
+      message: 'Back-off pulling image "ghcr.io/acme/orders:2026.09.4"'
+  get_logs:
+    current: 'container "orders" in pod "orders-service-58c7d4f9b6-w9xq2" is waiting to start'
+    previous: null
+  get_deployment_spec:
+    metadata:
+      name: orders-service
+      namespace: prod
+      generation: 57
+    spec:
+      replicas: 4
+      strategy:
+        type: RollingUpdate
+        rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+      selector:
+        matchLabels: {app: orders-service}
+      template:
+        metadata:
+          labels: {app: orders-service}
+        spec:
+          containers:
+            - name: orders
+              image: "ghcr.io/acme/orders:2026.09.4"
+              ports: [{containerPort: 8080}]
+              env:
+                - {name: LOG_LEVEL, value: warn}
+              resources:
+                requests: {cpu: 250m, memory: 512Mi}
+                limits: {memory: 1Gi}
+    status:
+      replicas: 5
+      readyReplicas: 4
+      updatedReplicas: 1
+      unavailableReplicas: 1
+      conditions:
+        - {type: Available, status: "True"}
+        - type: Progressing
+          status: "True"
+          reason: ReplicaSetUpdated
+          message: 'ReplicaSet "orders-service-58c7d4f9b6" is progressing.'
+  get_service:
+    metadata: {name: orders-service, namespace: prod}
+    spec:
+      selector: {app: orders-service}
+      ports: [{port: 80, targetPort: 8080, protocol: TCP}]
+  get_endpoints:
+    metadata: {name: orders-service, namespace: prod}
+    subsets:
+      - addresses: [{ip: 10.244.1.8}, {ip: 10.244.1.9}, {ip: 10.244.2.14}, {ip: 10.244.2.15}]
+        ports: [{port: 8080}]
+  get_pvc_status: not available
+  get_node_status:
+    - name: kind-worker2
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+expected:
+  category: registry_auth_missing
+  root_cause: "No imagePullSecrets for the private ghcr.io/acme registry, so the pull is anonymous and denied."
+  fix_check:
+    path: spec.template.spec.imagePullSecrets
+    must_exist: true
+metadata:
+  source: manual
+  k8s_version: "1.30"
+  runtime: containerd
+  recorded: 2026-09-30

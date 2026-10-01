@@ -1,0 +1,53 @@
+# Memory-tunable: ALLOC_MB controls how much tmpfs it fills, so lowering the memory limit
+# below that figure produces a genuine OOMKill rather than a simulated one.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-worker
+  namespace: chaosloop-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: analytics-worker
+  template:
+    metadata:
+      labels:
+        app: analytics-worker
+    spec:
+      containers:
+        - name: analytics
+          image: localhost:5001/busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "[analytics] allocating ${ALLOC_MB}MB working set"
+              dd if=/dev/zero of=/dev/shm/workingset bs=1M count="$ALLOC_MB" 2>/dev/null
+              echo "[analytics] steady state"
+              while true; do sleep 5; done
+          env:
+            - name: ALLOC_MB
+              value: "24"
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 96Mi}
+          volumeMounts:
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics-worker
+  namespace: chaosloop-lab
+spec:
+  selector:
+    app: analytics-worker
+  ports:
+    - port: 80
+      targetPort: 8080

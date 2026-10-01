@@ -1,0 +1,98 @@
+case_id: pending-insufficient-resources-01
+split: dev
+trigger:
+  alertname: PodPendingTooLong
+  service: analytics-worker
+  namespace: staging
+  pod: analytics-worker-7f4b9c8d6a-r2mpk
+evidence:
+  get_pod_status:
+    name: analytics-worker-7f4b9c8d6a-r2mpk
+    namespace: staging
+    phase: Pending
+    startTime: null
+    nodeName: null
+    conditions:
+      - type: PodScheduled
+        status: "False"
+        reason: Unschedulable
+        message: "0/3 nodes are available: 3 Insufficient memory. preemption: 0/3 nodes are available: 3 No preemption victims found for incoming pod."
+    containerStatuses: []
+  get_events:
+    - type: Warning
+      reason: FailedScheduling
+      count: 11
+      message: "0/3 nodes are available: 3 Insufficient memory. preemption: 0/3 nodes are available: 3 No preemption victims found for incoming pod."
+  get_logs:
+    current: 'Error from server (BadRequest): container "analytics" in pod "analytics-worker-7f4b9c8d6a-r2mpk" is waiting to start: ContainerCreating'
+    previous: null
+  get_deployment_spec:
+    metadata:
+      name: analytics-worker
+      namespace: staging
+      generation: 6
+    spec:
+      replicas: 1
+      strategy:
+        type: RollingUpdate
+        rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+      selector:
+        matchLabels: {app: analytics-worker}
+      template:
+        metadata:
+          labels: {app: analytics-worker}
+        spec:
+          containers:
+            - name: analytics
+              image: "registry.internal:5000/analytics:v0.9.4"
+              resources:
+                requests: {cpu: "2", memory: 12Gi}
+                limits: {memory: 12Gi}
+    status:
+      replicas: 1
+      readyReplicas: 0
+      updatedReplicas: 1
+      unavailableReplicas: 1
+      conditions:
+        - type: Available
+          status: "False"
+          reason: MinimumReplicasUnavailable
+        - type: Progressing
+          status: "True"
+          reason: ReplicaSetUpdated
+  get_service:
+    metadata: {name: analytics-worker, namespace: staging}
+    spec:
+      selector: {app: analytics-worker}
+      ports: [{port: 80, targetPort: 8080, protocol: TCP}]
+  get_endpoints:
+    metadata: {name: analytics-worker, namespace: staging}
+    subsets: []
+  get_pvc_status: not available
+  get_node_status:
+    - name: kind-control-plane
+      conditions: [{type: Ready, status: "True"}]
+      taints: [{key: node-role.kubernetes.io/control-plane, effect: NoSchedule}]
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+      allocatedRequests: {cpu: 950m, memory: 1740Mi}
+    - name: kind-worker
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+      allocatedRequests: {cpu: 1200m, memory: 3072Mi}
+    - name: kind-worker2
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+      allocatedRequests: {cpu: 800m, memory: 2560Mi}
+expected:
+  category: insufficient_resources
+  root_cause: "The pod requests 12Gi of memory but no node has that much allocatable - every node tops out near 7.7Gi - so the scheduler cannot place it."
+  fix_check:
+    path: spec.template.spec.containers.resources.requests.memory
+    must_exist: true
+metadata:
+  source: manual
+  k8s_version: "1.30"
+  runtime: containerd
+  recorded: 2026-09-30

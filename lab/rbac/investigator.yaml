@@ -1,0 +1,45 @@
+# Least privilege for the investigating agent (HLD §11): read-only, and with no access to
+# Secret values. A Secret referenced from a pod spec stays visible as a reference, which is
+# all the agent needs to reason about it.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: investigator
+  namespace: chaosloop-lab
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chaosloop-investigator
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - events
+      - services
+      - endpoints
+      - persistentvolumeclaims
+      - nodes
+      - namespaces
+      - configmaps
+    verbs: [get, list, watch]
+  - apiGroups: ["apps"]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: ["events.k8s.io"]
+    resources: [events]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chaosloop-investigator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: chaosloop-investigator
+subjects:
+  - kind: ServiceAccount
+    name: investigator
+    namespace: chaosloop-lab

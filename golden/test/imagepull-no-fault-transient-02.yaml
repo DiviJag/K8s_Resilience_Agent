@@ -1,0 +1,115 @@
+case_id: imagepull-no-fault-transient-02
+split: test
+trigger:
+  alertname: PodImagePullBackOff
+  service: session-service
+  namespace: prod
+  pod: session-service-7b4c9d8e52-t6fxm
+evidence:
+  get_pod_status:
+    name: session-service-7b4c9d8e52-t6fxm
+    namespace: prod
+    phase: Running
+    startTime: "2026-09-27T21:05:52Z"
+    containerStatuses:
+      - name: session
+        ready: true
+        restartCount: 0
+        image: "registry.internal:5000/session:v1.14.3"
+        state:
+          running:
+            startedAt: "2026-09-27T21:06:40Z"
+  get_events:
+    - type: Normal
+      reason: Scheduled
+      count: 1
+      message: "Successfully assigned prod/session-service-7b4c9d8e52-t6fxm to kind-worker"
+    - type: Warning
+      reason: Failed
+      count: 1
+      message: 'Failed to pull image "registry.internal:5000/session:v1.14.3": rpc error: code = DeadlineExceeded desc = failed to pull and unpack image: context deadline exceeded'
+    - type: Normal
+      reason: Pulled
+      count: 1
+      message: 'Successfully pulled image "registry.internal:5000/session:v1.14.3" in 41.203s (41.203s including waiting)'
+    - type: Normal
+      reason: Created
+      count: 1
+      message: "Created container session"
+    - type: Normal
+      reason: Started
+      count: 1
+      message: "Started container session"
+  get_logs:
+    current: |
+      2026-09-27T21:06:40Z INFO  session service ready on :8080
+      2026-09-27T21:06:41Z INFO  redis pool established (size=16)
+      2026-09-27T21:31:02Z INFO  active sessions: 8421
+    previous: null
+  get_deployment_spec:
+    metadata:
+      name: session-service
+      namespace: prod
+      generation: 15
+    spec:
+      replicas: 2
+      strategy:
+        type: RollingUpdate
+        rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+      selector:
+        matchLabels: {app: session-service}
+      template:
+        metadata:
+          labels: {app: session-service}
+        spec:
+          imagePullSecrets:
+            - name: regcred
+          containers:
+            - name: session
+              image: "registry.internal:5000/session:v1.14.3"
+              ports: [{containerPort: 8080}]
+              resources:
+                requests: {cpu: 100m, memory: 192Mi}
+                limits: {memory: 384Mi}
+              readinessProbe:
+                httpGet: {path: /ready, port: 8080}
+                initialDelaySeconds: 3
+    status:
+      replicas: 2
+      readyReplicas: 2
+      updatedReplicas: 2
+      unavailableReplicas: 0
+      conditions:
+        - {type: Available, status: "True"}
+        - type: Progressing
+          status: "True"
+          reason: NewReplicaSetAvailable
+          message: 'ReplicaSet "session-service-7b4c9d8e52" has successfully progressed.'
+  get_service:
+    metadata: {name: session-service, namespace: prod}
+    spec:
+      selector: {app: session-service}
+      ports: [{port: 80, targetPort: 8080, protocol: TCP}]
+  get_endpoints:
+    metadata: {name: session-service, namespace: prod}
+    subsets:
+      - addresses: [{ip: 10.244.1.101}, {ip: 10.244.2.88}]
+        ports: [{port: 8080}]
+  get_pvc_status: not available
+  get_node_status:
+    - name: kind-worker
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+expected:
+  category: no_fault
+  root_cause: "The first pull timed out on a slow layer fetch and the retry succeeded 41s later. Both replicas are Ready and serving; nothing needs changing."
+  fix_check:
+    path: "*"
+    must_exist: false
+metadata:
+  source: manual
+  k8s_version: "1.30"
+  runtime: containerd
+  recorded: 2026-09-30
+  note: "Negative control - drives the false-positive rate on the held-out split."

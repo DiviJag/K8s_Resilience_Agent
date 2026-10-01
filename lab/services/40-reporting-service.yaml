@@ -1,0 +1,68 @@
+# PVC-backed, with a readiness probe. Used for pvc_unbound and probe/service faults.
+# The claim uses kind's default "standard" StorageClass so it binds in steady state.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: reporting-data
+  namespace: chaosloop-lab
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reporting-service
+  namespace: chaosloop-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reporting-service
+  template:
+    metadata:
+      labels:
+        app: reporting-service
+    spec:
+      containers:
+        - name: reporting
+          image: localhost:5001/busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "[reporting] mounting /data"
+              touch /data/ready
+              echo "[reporting] listening on :8080"
+              while true; do nc -l -p 8080 -e /bin/echo ok; done
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: reporting-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reporting-service
+  namespace: chaosloop-lab
+spec:
+  selector:
+    app: reporting-service
+  ports:
+    - port: 80
+      targetPort: 8080

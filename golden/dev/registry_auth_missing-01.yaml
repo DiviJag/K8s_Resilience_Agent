@@ -1,0 +1,270 @@
+case_id: registry_auth_missing-01
+split: dev
+trigger:
+  alertname: PodImagePullBackOff
+  service: cart-service
+  namespace: chaosloop-lab
+  pod: cart-service-885b5d5b-nclsd
+  extra: {}
+evidence:
+  get_pod_status:
+    name: cart-service-885b5d5b-nclsd
+    namespace: chaosloop-lab
+    phase: Pending
+    startTime: '2026-10-01T14:54:27+00:00'
+    nodeName: chaosloop-worker2
+    conditions:
+    - type: PodReadyToStartContainers
+      status: 'True'
+      reason: null
+      message: null
+    - type: Initialized
+      status: 'True'
+      reason: null
+      message: null
+    - type: Ready
+      status: 'False'
+      reason: ContainersNotReady
+      message: 'containers with unready status: [cart]'
+    - type: ContainersReady
+      status: 'False'
+      reason: ContainersNotReady
+      message: 'containers with unready status: [cart]'
+    - type: PodScheduled
+      status: 'True'
+      reason: null
+      message: null
+    containerStatuses:
+    - name: cart
+      ready: false
+      restartCount: 0
+      image: ghcr.io/chaosloop-private/cart:v1.0.0
+      state:
+        waiting:
+          reason: ImagePullBackOff
+          message: 'Back-off pulling image "ghcr.io/chaosloop-private/cart:v1.0.0":
+            ErrImagePull: failed to pull and unpack image "ghcr.io/chaosloop-private/cart:v1.0.0":
+            failed to resolve reference "ghcr.io/chaosloop-private/cart:v1.0.0": failed
+            to authorize: failed to fetch anonymous token: unexpected status from
+            GET request to https://ghcr.io/token?scope=repository%3Achaosloop-private%2Fcart%3Apull&service=ghcr.io:
+            403 Forbidden'
+      lastState: null
+  get_events:
+  - type: Normal
+    reason: Scheduled
+    count: 1
+    message: Successfully assigned chaosloop-lab/cart-service-885b5d5b-nclsd to chaosloop-worker2
+    lastTimestamp: '2026-10-01T14:54:27+00:00'
+    involvedObject: cart-service-885b5d5b-nclsd
+  - type: Normal
+    reason: Pulling
+    count: 5
+    message: Pulling image "ghcr.io/chaosloop-private/cart:v1.0.0"
+    lastTimestamp: '2026-10-01T14:57:17+00:00'
+    involvedObject: cart-service-885b5d5b-nclsd
+  - type: Warning
+    reason: Failed
+    count: 5
+    message: 'Failed to pull image "ghcr.io/chaosloop-private/cart:v1.0.0": failed
+      to pull and unpack image "ghcr.io/chaosloop-private/cart:v1.0.0": failed to
+      resolve reference "ghcr.io/chaosloop-private/cart:v1.0.0": failed to authorize:
+      failed to fetch anonymous token: unexpected status from GET request to https://ghcr.io/token?scope=repository%3Achaosloop-private%2Fcart%3Apull&service=ghcr.io:
+      403 Forbidden'
+    lastTimestamp: '2026-10-01T14:57:17+00:00'
+    involvedObject: cart-service-885b5d5b-nclsd
+  - type: Warning
+    reason: Failed
+    count: 5
+    message: 'Error: ErrImagePull'
+    lastTimestamp: '2026-10-01T14:57:17+00:00'
+    involvedObject: cart-service-885b5d5b-nclsd
+  - type: Normal
+    reason: BackOff
+    count: 65
+    message: Back-off pulling image "ghcr.io/chaosloop-private/cart:v1.0.0"
+    lastTimestamp: '2026-10-01T15:09:36+00:00'
+    involvedObject: cart-service-885b5d5b-nclsd
+  - type: Warning
+    reason: Failed
+    count: 65
+    message: 'Error: ImagePullBackOff'
+    lastTimestamp: '2026-10-01T15:09:36+00:00'
+    involvedObject: cart-service-885b5d5b-nclsd
+  get_logs:
+    current: 'error: container "cart" in pod "cart-service-885b5d5b-nclsd" is waiting
+      to start: trying and failing to pull image'
+    previous: 'error: previous terminated container "cart" in pod "cart-service-885b5d5b-nclsd"
+      not found'
+  get_deployment_spec:
+    metadata:
+      name: cart-service
+      namespace: chaosloop-lab
+      generation: 2
+    spec:
+      replicas: 2
+      progressDeadlineSeconds: 600
+      strategy:
+        type: RollingUpdate
+      selector:
+        matchLabels:
+          app: cart-service
+      template:
+        metadata:
+          labels:
+            app: cart-service
+        spec:
+          nodeSelector: null
+          tolerations: []
+          imagePullSecrets: []
+          volumes: []
+          containers:
+          - name: cart
+            image: ghcr.io/chaosloop-private/cart:v1.0.0
+            command:
+            - /bin/sh
+            - -c
+            args:
+            - 'echo "[cart] listening on :8080"
+
+              while true; do sleep 5; done
+
+              '
+            ports:
+            - containerPort: 8080
+            env: []
+            envFrom: []
+            resources:
+              requests:
+                cpu: 10m
+                memory: 16Mi
+              limits:
+                memory: 64Mi
+            livenessProbe: null
+            readinessProbe: null
+            volumeMounts: []
+    status:
+      replicas: 3
+      readyReplicas: 2
+      updatedReplicas: 1
+      unavailableReplicas: 1
+      conditions:
+      - type: Available
+        status: 'True'
+        reason: MinimumReplicasAvailable
+        message: Deployment has minimum availability.
+      - type: Progressing
+        status: 'False'
+        reason: ProgressDeadlineExceeded
+        message: ReplicaSet "cart-service-885b5d5b" has timed out progressing.
+  get_service:
+    metadata:
+      name: cart-service
+      namespace: chaosloop-lab
+    spec:
+      type: ClusterIP
+      selector:
+        app: cart-service
+      ports:
+      - port: 80
+        targetPort: 8080
+        protocol: TCP
+        name: null
+  get_endpoints:
+    metadata:
+      name: cart-service
+      namespace: chaosloop-lab
+    subsets:
+    - addresses:
+      - ip: 10.244.1.10
+      - ip: 10.244.2.4
+      notReadyAddresses:
+      - ip: 10.244.1.12
+      ports:
+      - port: 8080
+        name: null
+  get_pvc_status: not available
+  get_node_status:
+  - name: chaosloop-control-plane
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-control-plane
+      kubernetes.io/os: linux
+      node-role.kubernetes.io/control-plane: ''
+      node.kubernetes.io/exclude-from-external-load-balancers: ''
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints:
+    - key: node-role.kubernetes.io/control-plane
+      value: null
+      effect: NoSchedule
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.95'
+      memory: 290Mi
+  - name: chaosloop-worker
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints: []
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.13'
+      memory: 114Mi
+  - name: chaosloop-worker2
+    labels:
+      beta.kubernetes.io/arch: amd64
+      beta.kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+      kubernetes.io/hostname: chaosloop-worker2
+      kubernetes.io/os: linux
+    conditions:
+    - type: Ready
+      status: 'True'
+      reason: KubeletReady
+    taints: []
+    allocatable:
+      cpu: '24'
+      ephemeral-storage: 863912956Ki
+      hugepages-1Gi: '0'
+      hugepages-2Mi: '0'
+      memory: 2006152Ki
+      pods: '110'
+    allocatedRequests:
+      cpu: '0.14'
+      memory: 114Mi
+expected:
+  category: registry_auth_missing
+  root_cause: The deployment has no imagePullSecrets, so the kubelet pulls anonymously
+    from the private ghcr.io/chaosloop-private registry and is denied.
+  fix_check:
+    path: spec.template.spec.imagePullSecrets
+    must_exist: true
+    equals: null
+metadata:
+  source: chaos
+  k8s_version: '1.30'
+  runtime: containerd
+  recorded: '2026-10-01'

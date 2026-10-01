@@ -1,0 +1,122 @@
+case_id: crashloop-missing-env-var-02
+split: test
+trigger:
+  alertname: PodCrashLooping
+  service: reporting-service
+  namespace: staging
+  pod: reporting-service-5c9a8b7d64-mv3qz
+evidence:
+  get_pod_status:
+    name: reporting-service-5c9a8b7d64-mv3qz
+    namespace: staging
+    phase: Running
+    startTime: "2026-09-28T06:52:30Z"
+    containerStatuses:
+      - name: reporting
+        ready: false
+        restartCount: 12
+        image: "registry.internal:5000/reporting:v1.4.1"
+        state:
+          waiting:
+            reason: CrashLoopBackOff
+            message: "back-off 5m0s restarting failed container=reporting pod=reporting-service-5c9a8b7d64-mv3qz_staging"
+        lastState:
+          terminated:
+            exitCode: 78
+            reason: Error
+            startedAt: "2026-09-28T07:44:11Z"
+            finishedAt: "2026-09-28T07:44:11Z"
+  get_events:
+    - type: Normal
+      reason: Pulled
+      count: 13
+      message: 'Container image "registry.internal:5000/reporting:v1.4.1" already present on machine'
+    - type: Normal
+      reason: Created
+      count: 13
+      message: "Created container reporting"
+    - type: Normal
+      reason: Started
+      count: 13
+      message: "Started container reporting"
+    - type: Warning
+      reason: BackOff
+      count: 44
+      message: "Back-off restarting failed container reporting in pod reporting-service-5c9a8b7d64-mv3qz_staging"
+  get_logs:
+    current: ""
+    previous: |
+      [reporting] boot sequence start
+      [reporting] loading configuration from environment
+      [reporting] ERROR missing required configuration: S3_BUCKET
+      [reporting] exiting with status 78 (EX_CONFIG)
+  get_deployment_spec:
+    metadata:
+      name: reporting-service
+      namespace: staging
+      generation: 18
+    spec:
+      replicas: 1
+      strategy:
+        type: RollingUpdate
+        rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+      selector:
+        matchLabels: {app: reporting-service}
+      template:
+        metadata:
+          labels: {app: reporting-service}
+        spec:
+          imagePullSecrets:
+            - name: regcred
+          containers:
+            - name: reporting
+              image: "registry.internal:5000/reporting:v1.4.1"
+              ports: [{containerPort: 8080}]
+              env:
+                - {name: LOG_LEVEL, value: debug}
+                - {name: AWS_REGION, value: eu-west-1}
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef: {name: reporting-aws, key: secret_access_key}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {memory: 512Mi}
+    status:
+      replicas: 1
+      readyReplicas: 0
+      updatedReplicas: 1
+      unavailableReplicas: 1
+      conditions:
+        - type: Available
+          status: "False"
+          reason: MinimumReplicasUnavailable
+        - type: Progressing
+          status: "True"
+          reason: ReplicaSetUpdated
+  get_service:
+    metadata: {name: reporting-service, namespace: staging}
+    spec:
+      selector: {app: reporting-service}
+      ports: [{port: 80, targetPort: 8080, protocol: TCP}]
+  get_endpoints:
+    metadata: {name: reporting-service, namespace: staging}
+    subsets:
+      - notReadyAddresses: [{ip: 10.244.2.57}]
+        ports: [{port: 8080}]
+  get_pvc_status: not available
+  get_node_status:
+    - name: kind-worker2
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+expected:
+  category: missing_env_var
+  root_cause: "The container exits with EX_CONFIG on every start because the required S3_BUCKET environment variable is absent from the pod spec."
+  fix_check:
+    path: spec.template.spec.containers.env
+    must_exist: true
+metadata:
+  source: manual
+  k8s_version: "1.30"
+  runtime: containerd
+  recorded: 2026-09-30

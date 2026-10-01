@@ -1,0 +1,109 @@
+case_id: imagepull-tag-not-found-02
+split: test
+trigger:
+  alertname: PodImagePullBackOff
+  service: inventory-service
+  namespace: prod
+  pod: inventory-service-6d5f8a7c43-pz4bl
+evidence:
+  get_pod_status:
+    name: inventory-service-6d5f8a7c43-pz4bl
+    namespace: prod
+    phase: Pending
+    startTime: "2026-09-26T13:27:44Z"
+    containerStatuses:
+      - name: inventory
+        ready: false
+        restartCount: 0
+        image: "registry.internal:5000/inventory:v5.3.0-rc2"
+        state:
+          waiting:
+            reason: ErrImagePull
+            message: 'rpc error: code = NotFound desc = failed to resolve reference "registry.internal:5000/inventory:v5.3.0-rc2"'
+  get_events:
+    - type: Normal
+      reason: Scheduled
+      count: 1
+      message: "Successfully assigned prod/inventory-service-6d5f8a7c43-pz4bl to kind-worker"
+    - type: Normal
+      reason: Pulling
+      count: 3
+      message: 'Pulling image "registry.internal:5000/inventory:v5.3.0-rc2"'
+    - type: Warning
+      reason: Failed
+      count: 3
+      message: 'Failed to pull image "registry.internal:5000/inventory:v5.3.0-rc2": rpc error: code = NotFound desc = failed to resolve reference "registry.internal:5000/inventory:v5.3.0-rc2": registry.internal:5000/inventory:v5.3.0-rc2: not found'
+    - type: Warning
+      reason: Failed
+      count: 3
+      message: "Error: ErrImagePull"
+    - type: Normal
+      reason: BackOff
+      count: 7
+      message: 'Back-off pulling image "registry.internal:5000/inventory:v5.3.0-rc2"'
+  get_logs:
+    current: 'container "inventory" in pod "inventory-service-6d5f8a7c43-pz4bl" is waiting to start: trying and failing to pull image'
+    previous: null
+  get_deployment_spec:
+    metadata:
+      name: inventory-service
+      namespace: prod
+      generation: 29
+    spec:
+      replicas: 2
+      strategy:
+        type: RollingUpdate
+        rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+      selector:
+        matchLabels: {app: inventory-service}
+      template:
+        metadata:
+          labels: {app: inventory-service}
+        spec:
+          imagePullSecrets:
+            - name: regcred
+          containers:
+            - name: inventory
+              image: "registry.internal:5000/inventory:v5.3.0-rc2"
+              ports: [{containerPort: 8080}]
+              resources:
+                requests: {cpu: 200m, memory: 256Mi}
+                limits: {memory: 512Mi}
+    status:
+      replicas: 3
+      readyReplicas: 2
+      updatedReplicas: 1
+      unavailableReplicas: 1
+      conditions:
+        - {type: Available, status: "True"}
+        - type: Progressing
+          status: "True"
+          reason: ReplicaSetUpdated
+          message: 'ReplicaSet "inventory-service-6d5f8a7c43" is progressing.'
+  get_service:
+    metadata: {name: inventory-service, namespace: prod}
+    spec:
+      selector: {app: inventory-service}
+      ports: [{port: 80, targetPort: 8080, protocol: TCP}]
+  get_endpoints:
+    metadata: {name: inventory-service, namespace: prod}
+    subsets:
+      - addresses: [{ip: 10.244.1.91}, {ip: 10.244.2.73}]
+        ports: [{port: 8080}]
+  get_pvc_status: not available
+  get_node_status:
+    - name: kind-worker
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+expected:
+  category: image_tag_not_found
+  root_cause: "Tag v5.3.0-rc2 was never pushed to registry.internal:5000; the registry cannot resolve the reference. Credentials are present and working."
+  fix_check:
+    path: spec.template.spec.containers.image
+    must_exist: true
+metadata:
+  source: manual
+  k8s_version: "1.30"
+  runtime: containerd
+  recorded: 2026-09-30

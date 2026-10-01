@@ -1,0 +1,42 @@
+# Pulls from the local registry, so image_tag_not_found / registry_auth_missing /
+# registry_unreachable can be injected by rewriting the image reference alone.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cart-service
+  namespace: chaosloop-lab
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cart-service
+  template:
+    metadata:
+      labels:
+        app: cart-service
+    spec:
+      containers:
+        - name: cart
+          image: localhost:5001/cart:v1.0.0
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "[cart] listening on :8080"
+              while true; do sleep 5; done
+          ports:
+            - containerPort: 8080
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cart-service
+  namespace: chaosloop-lab
+spec:
+  selector:
+    app: cart-service
+  ports:
+    - port: 80
+      targetPort: 8080

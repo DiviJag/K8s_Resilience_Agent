@@ -1,0 +1,16 @@
+# Tier A gate (HLD §6.2). Set from a measured baseline rather than guessed: on 2026-10-01 the
+# held-out test split scored 1.00 category, 1.00 fix, 0.00 false positives over 15 runs
+# (5 cases x 3 repeats, anthropic/claude-sonnet-4.5, prompt v2).
+#
+# The accuracy floors leave room for roughly two bad runs out of fifteen, so a single unlucky
+# sample does not redden CI while a genuine regression still does. Ratchet them up as Track B
+# recordings grow the test split.
+category_accuracy_min: 0.85
+fix_accuracy_min: 0.80
+
+# Stricter on purpose: naming a fault on a healthy cluster is the failure that erodes trust in
+# the agent fastest, so even one false positive on the negative controls should fail the gate.
+false_positive_rate_max: 0.20
+
+malformed_rate_max: 0.05
+error_rate_max: 0.10

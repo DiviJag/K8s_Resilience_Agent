@@ -1,0 +1,13 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: chaosloop
+# certs.d lets lab-up.ps1 point localhost:5001 at the registry container without baking
+# registry addresses into the node image (kind's documented local-registry pattern).
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry]
+      config_path = "/etc/containerd/certs.d"
+nodes:
+  - role: control-plane
+  - role: worker
+  - role: worker

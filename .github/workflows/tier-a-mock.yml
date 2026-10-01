@@ -1,0 +1,23 @@
+name: tier-a-mock
+
+# Fast, free, deterministic gate on every change: schemas, grading, redaction and the
+# harness pipeline, all against a scripted model. No API key, no model variance.
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv sync
+      - name: Validate the golden set
+        run: uv run chaosloop-eval validate
+      - name: Unit and harness tests
+        run: uv run pytest
+      - name: Lint
+        run: uv run ruff check .

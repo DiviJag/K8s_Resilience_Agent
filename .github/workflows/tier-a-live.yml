@@ -1,0 +1,38 @@
+name: tier-a-live
+
+# Real-model accuracy gate on the held-out test split. Kept off per-PR because model calls
+# cost money and vary run to run; promote to pull_request once that is acceptable.
+on:
+  workflow_dispatch:
+    inputs:
+      split:
+        description: dev or test
+        default: test
+      repeats:
+        description: runs per case
+        default: "3"
+  schedule:
+    - cron: "0 6 * * *"
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv sync
+      - name: Tier A golden-set eval
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          CHAOSLOOP_MODEL: ${{ vars.CHAOSLOOP_MODEL }}
+        run: >
+          uv run chaosloop-eval run
+          --split ${{ inputs.split || 'test' }}
+          --repeats ${{ inputs.repeats || 3 }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-run
+          path: eval/runs/*.jsonl

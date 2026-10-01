@@ -1,0 +1,114 @@
+case_id: imagepull-tag-not-found-01
+split: dev
+trigger:
+  alertname: PodImagePullBackOff
+  service: checkout-service
+  namespace: prod
+  pod: checkout-service-6c9b4d7f88-v4n2p
+evidence:
+  get_pod_status:
+    name: checkout-service-6c9b4d7f88-v4n2p
+    namespace: prod
+    phase: Pending
+    startTime: "2026-09-28T09:14:02Z"
+    containerStatuses:
+      - name: checkout
+        ready: false
+        restartCount: 0
+        image: "registry.internal:5000/checkout:v2.4.11"
+        state:
+          waiting:
+            reason: ImagePullBackOff
+            message: 'Back-off pulling image "registry.internal:5000/checkout:v2.4.11"'
+  get_events:
+    - type: Normal
+      reason: Scheduled
+      count: 1
+      message: "Successfully assigned prod/checkout-service-6c9b4d7f88-v4n2p to kind-worker2"
+    - type: Normal
+      reason: Pulling
+      count: 4
+      message: 'Pulling image "registry.internal:5000/checkout:v2.4.11"'
+    - type: Warning
+      reason: Failed
+      count: 4
+      message: 'Failed to pull image "registry.internal:5000/checkout:v2.4.11": rpc error: code = NotFound desc = failed to pull and unpack image "registry.internal:5000/checkout:v2.4.11": failed to resolve reference "registry.internal:5000/checkout:v2.4.11": registry.internal:5000/checkout:v2.4.11: not found: manifest unknown'
+    - type: Warning
+      reason: Failed
+      count: 4
+      message: "Error: ErrImagePull"
+    - type: Normal
+      reason: BackOff
+      count: 12
+      message: 'Back-off pulling image "registry.internal:5000/checkout:v2.4.11"'
+  get_logs:
+    current: 'Error from server (BadRequest): container "checkout" in pod "checkout-service-6c9b4d7f88-v4n2p" is waiting to start: trying and failing to pull image'
+    previous: null
+  get_deployment_spec:
+    metadata:
+      name: checkout-service
+      namespace: prod
+      generation: 12
+    spec:
+      replicas: 3
+      strategy:
+        type: RollingUpdate
+        rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+      selector:
+        matchLabels: {app: checkout-service}
+      template:
+        metadata:
+          labels: {app: checkout-service}
+        spec:
+          imagePullSecrets:
+            - name: regcred
+          containers:
+            - name: checkout
+              image: "registry.internal:5000/checkout:v2.4.11"
+              ports: [{containerPort: 8080}]
+              env:
+                - {name: LOG_LEVEL, value: info}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {memory: 512Mi}
+              readinessProbe:
+                httpGet: {path: /healthz, port: 8080}
+                initialDelaySeconds: 5
+    status:
+      replicas: 4
+      readyReplicas: 3
+      updatedReplicas: 1
+      unavailableReplicas: 1
+      conditions:
+        - {type: Available, status: "True"}
+        - type: Progressing
+          status: "True"
+          reason: ReplicaSetUpdated
+          message: 'ReplicaSet "checkout-service-6c9b4d7f88" is progressing.'
+  get_service:
+    metadata: {name: checkout-service, namespace: prod}
+    spec:
+      selector: {app: checkout-service}
+      ports: [{port: 80, targetPort: 8080, protocol: TCP}]
+  get_endpoints:
+    metadata: {name: checkout-service, namespace: prod}
+    subsets:
+      - addresses: [{ip: 10.244.1.17}, {ip: 10.244.2.9}, {ip: 10.244.1.22}]
+        ports: [{port: 8080}]
+  get_pvc_status: not available
+  get_node_status:
+    - name: kind-worker2
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+expected:
+  category: image_tag_not_found
+  root_cause: "The deployment was rolled out with image tag v2.4.11, which does not exist in registry.internal:5000 - the registry resolves the reference to manifest unknown."
+  fix_check:
+    path: spec.template.spec.containers.image
+    must_exist: true
+metadata:
+  source: manual
+  k8s_version: "1.30"
+  runtime: containerd
+  recorded: 2026-09-30

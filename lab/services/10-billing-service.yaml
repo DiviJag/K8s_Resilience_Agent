@@ -1,0 +1,65 @@
+# Config-driven service: exits at startup when a required env var is absent, which is how
+# missing_env_var and bad_config_value are injected without building a custom image.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: billing-config
+  namespace: chaosloop-lab
+data:
+  LOG_LEVEL: info
+  MAX_WORKERS: "4"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing-service
+  namespace: chaosloop-lab
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: billing-service
+  template:
+    metadata:
+      labels:
+        app: billing-service
+    spec:
+      containers:
+        - name: billing
+          image: localhost:5001/busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "[billing] boot sequence start"
+              if [ -z "$DATABASE_URL" ]; then
+                echo "[billing] FATAL config: required environment variable DATABASE_URL is not set"
+                exit 1
+              fi
+              case "$MAX_WORKERS" in
+                ''|*[!0-9]*) echo "[billing] FATAL config: MAX_WORKERS must be an integer, got '$MAX_WORKERS'"; exit 78 ;;
+              esac
+              echo "[billing] listening on :8080 with $MAX_WORKERS workers"
+              while true; do sleep 5; done
+          env:
+            - name: DATABASE_URL
+              value: postgres://billing-db:5432/billing
+          envFrom:
+            - configMapRef:
+                name: billing-config
+          ports:
+            - containerPort: 8080
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: billing-service
+  namespace: chaosloop-lab
+spec:
+  selector:
+    app: billing-service
+  ports:
+    - port: 80
+      targetPort: 8080

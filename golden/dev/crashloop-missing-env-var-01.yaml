@@ -1,0 +1,134 @@
+case_id: crashloop-missing-env-var-01
+split: dev
+trigger:
+  alertname: PodCrashLooping
+  service: billing-service
+  namespace: prod
+  pod: billing-service-6b8d4f7c92-8kdnv
+evidence:
+  get_pod_status:
+    name: billing-service-6b8d4f7c92-8kdnv
+    namespace: prod
+    phase: Running
+    startTime: "2026-09-29T14:03:17Z"
+    containerStatuses:
+      - name: billing
+        ready: false
+        restartCount: 7
+        image: "registry.internal:5000/billing:v2.2.0"
+        state:
+          waiting:
+            reason: CrashLoopBackOff
+            message: "back-off 5m0s restarting failed container=billing pod=billing-service-6b8d4f7c92-8kdnv_prod"
+        lastState:
+          terminated:
+            exitCode: 1
+            reason: Error
+            startedAt: "2026-09-29T14:21:02Z"
+            finishedAt: "2026-09-29T14:21:03Z"
+  get_events:
+    - type: Normal
+      reason: Scheduled
+      count: 1
+      message: "Successfully assigned prod/billing-service-6b8d4f7c92-8kdnv to kind-worker"
+    - type: Normal
+      reason: Pulled
+      count: 8
+      message: 'Container image "registry.internal:5000/billing:v2.2.0" already present on machine'
+    - type: Normal
+      reason: Created
+      count: 8
+      message: "Created container billing"
+    - type: Normal
+      reason: Started
+      count: 8
+      message: "Started container billing"
+    - type: Warning
+      reason: BackOff
+      count: 26
+      message: "Back-off restarting failed container billing in pod billing-service-6b8d4f7c92-8kdnv_prod"
+  get_logs:
+    current: ""
+    previous: |
+      2026-09-29T14:21:03Z INFO  billing starting, version v2.2.0
+      2026-09-29T14:21:03Z FATAL config: required environment variable DATABASE_URL is not set
+      Traceback (most recent call last):
+        File "/app/main.py", line 22, in <module>
+          settings = Settings.from_env()
+        File "/app/config.py", line 41, in from_env
+          raise KeyError(name)
+      KeyError: 'DATABASE_URL'
+  get_deployment_spec:
+    metadata:
+      name: billing-service
+      namespace: prod
+      generation: 41
+    spec:
+      replicas: 2
+      strategy:
+        type: RollingUpdate
+        rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+      selector:
+        matchLabels: {app: billing-service}
+      template:
+        metadata:
+          labels: {app: billing-service}
+        spec:
+          imagePullSecrets:
+            - name: regcred
+          containers:
+            - name: billing
+              image: "registry.internal:5000/billing:v2.2.0"
+              ports: [{containerPort: 8080}]
+              env:
+                - {name: LOG_LEVEL, value: info}
+                - {name: PORT, value: "8080"}
+              envFrom:
+                - configMapRef: {name: billing-config}
+              resources:
+                requests: {cpu: 200m, memory: 256Mi}
+                limits: {memory: 512Mi}
+              livenessProbe:
+                httpGet: {path: /healthz, port: 8080}
+                initialDelaySeconds: 10
+                periodSeconds: 10
+    status:
+      replicas: 2
+      readyReplicas: 1
+      updatedReplicas: 2
+      unavailableReplicas: 1
+      conditions:
+        - {type: Available, status: "True"}
+        - type: Progressing
+          status: "True"
+          reason: ReplicaSetUpdated
+          message: 'ReplicaSet "billing-service-6b8d4f7c92" is progressing.'
+  get_service:
+    metadata: {name: billing-service, namespace: prod}
+    spec:
+      selector: {app: billing-service}
+      ports: [{port: 80, targetPort: 8080, protocol: TCP}]
+  get_endpoints:
+    metadata: {name: billing-service, namespace: prod}
+    subsets:
+      - addresses: [{ip: 10.244.1.62}]
+        notReadyAddresses: [{ip: 10.244.2.48}]
+        ports: [{port: 8080}]
+  get_pvc_status: not available
+  get_node_status:
+    - name: kind-worker
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+expected:
+  category: missing_env_var
+  root_cause: "The container exits at startup because DATABASE_URL is not provided: neither the env list nor the billing-config ConfigMap supplies it."
+  fix_check:
+    path: spec.template.spec.containers.env
+    must_exist: true
+metadata:
+  source: manual
+  k8s_version: "1.30"
+  runtime: containerd
+  recorded: 2026-09-30
+  note: "Current logs are empty; the cause is only visible via logs --previous (HLD §12)."

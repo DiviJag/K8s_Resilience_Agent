@@ -1,0 +1,110 @@
+case_id: imagepull-registry-unreachable-01
+split: dev
+trigger:
+  alertname: PodImagePullBackOff
+  service: search-service
+  namespace: prod
+  pod: search-service-5f7c8d9b46-lm8tr
+evidence:
+  get_pod_status:
+    name: search-service-5f7c8d9b46-lm8tr
+    namespace: prod
+    phase: Pending
+    startTime: "2026-09-29T16:48:12Z"
+    containerStatuses:
+      - name: search
+        ready: false
+        restartCount: 0
+        image: "registry.local/search:v3.1.0"
+        state:
+          waiting:
+            reason: ImagePullBackOff
+            message: 'Back-off pulling image "registry.local/search:v3.1.0"'
+  get_events:
+    - type: Normal
+      reason: Scheduled
+      count: 1
+      message: "Successfully assigned prod/search-service-5f7c8d9b46-lm8tr to kind-worker2"
+    - type: Normal
+      reason: Pulling
+      count: 5
+      message: 'Pulling image "registry.local/search:v3.1.0"'
+    - type: Warning
+      reason: Failed
+      count: 5
+      message: 'Failed to pull image "registry.local/search:v3.1.0": rpc error: code = Unknown desc = failed to resolve reference "registry.local/search:v3.1.0": failed to do request: Head "https://registry.local/v2/search/manifests/v3.1.0": dial tcp: lookup registry.local on 10.96.0.10:53: no such host'
+    - type: Warning
+      reason: Failed
+      count: 5
+      message: "Error: ErrImagePull"
+    - type: Normal
+      reason: BackOff
+      count: 14
+      message: 'Back-off pulling image "registry.local/search:v3.1.0"'
+  get_logs:
+    current: 'Error from server (BadRequest): container "search" in pod "search-service-5f7c8d9b46-lm8tr" is waiting to start: trying and failing to pull image'
+    previous: null
+  get_deployment_spec:
+    metadata:
+      name: search-service
+      namespace: prod
+      generation: 8
+    spec:
+      replicas: 2
+      strategy:
+        type: RollingUpdate
+        rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+      selector:
+        matchLabels: {app: search-service}
+      template:
+        metadata:
+          labels: {app: search-service}
+        spec:
+          imagePullSecrets:
+            - name: regcred
+          containers:
+            - name: search
+              image: "registry.local/search:v3.1.0"
+              ports: [{containerPort: 9200}]
+              resources:
+                requests: {cpu: 500m, memory: 1Gi}
+                limits: {memory: 2Gi}
+    status:
+      replicas: 3
+      readyReplicas: 2
+      updatedReplicas: 1
+      unavailableReplicas: 1
+      conditions:
+        - {type: Available, status: "True"}
+        - type: Progressing
+          status: "True"
+          reason: ReplicaSetUpdated
+          message: 'ReplicaSet "search-service-5f7c8d9b46" is progressing.'
+  get_service:
+    metadata: {name: search-service, namespace: prod}
+    spec:
+      selector: {app: search-service}
+      ports: [{port: 9200, targetPort: 9200, protocol: TCP}]
+  get_endpoints:
+    metadata: {name: search-service, namespace: prod}
+    subsets:
+      - addresses: [{ip: 10.244.1.51}, {ip: 10.244.2.63}]
+        ports: [{port: 9200}]
+  get_pvc_status: not available
+  get_node_status:
+    - name: kind-worker2
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+      notes: "cluster DNS 10.96.0.10 returns NXDOMAIN for registry.local from every node"
+expected:
+  category: registry_unreachable
+  root_cause: "The registry hostname registry.local does not resolve from the nodes, so the kubelet never reaches the registry. The deployment spec itself - tag and pull secret - is correct."
+  fix_check:
+    path: spec.template.spec.containers.image
+    must_exist: false
+metadata:
+  source: manual
+  k8s_version: "1.30"
+  runtime: containerd
+  recorded: 2026-09-30

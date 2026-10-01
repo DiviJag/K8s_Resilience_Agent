@@ -1,0 +1,98 @@
+case_id: pending-node-selector-mismatch-01
+split: test
+trigger:
+  alertname: PodPendingTooLong
+  service: gpu-scorer
+  namespace: staging
+  pod: gpu-scorer-6a7b8c9d15-k4zvn
+evidence:
+  get_pod_status:
+    name: gpu-scorer-6a7b8c9d15-k4zvn
+    namespace: staging
+    phase: Pending
+    startTime: null
+    nodeName: null
+    conditions:
+      - type: PodScheduled
+        status: "False"
+        reason: Unschedulable
+        message: "0/3 nodes are available: 3 node(s) didn't match Pod's node affinity/selector."
+    containerStatuses: []
+  get_events:
+    - type: Warning
+      reason: FailedScheduling
+      count: 9
+      message: "0/3 nodes are available: 3 node(s) didn't match Pod's node affinity/selector. preemption: 0/3 nodes are available: 3 Preemption is not helpful for scheduling."
+  get_logs:
+    current: 'container "scorer" in pod "gpu-scorer-6a7b8c9d15-k4zvn" is waiting to start: ContainerCreating'
+    previous: null
+  get_deployment_spec:
+    metadata:
+      name: gpu-scorer
+      namespace: staging
+      generation: 3
+    spec:
+      replicas: 1
+      selector:
+        matchLabels: {app: gpu-scorer}
+      template:
+        metadata:
+          labels: {app: gpu-scorer}
+        spec:
+          nodeSelector:
+            accelerator: nvidia-t4
+          containers:
+            - name: scorer
+              image: "registry.internal:5000/scorer:v0.4.0"
+              resources:
+                requests: {cpu: 500m, memory: 1Gi}
+                limits: {memory: 2Gi}
+    status:
+      replicas: 1
+      readyReplicas: 0
+      updatedReplicas: 1
+      unavailableReplicas: 1
+      conditions:
+        - type: Available
+          status: "False"
+          reason: MinimumReplicasUnavailable
+  get_service:
+    metadata: {name: gpu-scorer, namespace: staging}
+    spec:
+      selector: {app: gpu-scorer}
+      ports: [{port: 80, targetPort: 8080, protocol: TCP}]
+  get_endpoints:
+    metadata: {name: gpu-scorer, namespace: staging}
+    subsets: []
+  get_pvc_status: not available
+  get_node_status:
+    - name: kind-control-plane
+      labels: {kubernetes.io/os: linux, node-role.kubernetes.io/control-plane: ""}
+      conditions: [{type: Ready, status: "True"}]
+      taints: [{key: node-role.kubernetes.io/control-plane, effect: NoSchedule}]
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+      allocatedRequests: {cpu: 950m, memory: 1740Mi}
+    - name: kind-worker
+      labels: {kubernetes.io/os: linux}
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+      allocatedRequests: {cpu: 1100m, memory: 2048Mi}
+    - name: kind-worker2
+      labels: {kubernetes.io/os: linux}
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+      allocatedRequests: {cpu: 700m, memory: 1536Mi}
+expected:
+  category: node_selector_mismatch
+  root_cause: "The pod requires nodeSelector accelerator=nvidia-t4 but no node in the cluster carries that label, so scheduling fails on affinity rather than on capacity."
+  fix_check:
+    path: spec.template.spec.nodeSelector
+    must_exist: true
+metadata:
+  source: manual
+  k8s_version: "1.30"
+  runtime: containerd
+  recorded: 2026-09-30
+  note: "Capacity is plentiful here - discriminates node_selector_mismatch from insufficient_resources."

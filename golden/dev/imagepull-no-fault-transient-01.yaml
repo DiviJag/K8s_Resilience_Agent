@@ -1,0 +1,119 @@
+case_id: imagepull-no-fault-transient-01
+split: dev
+trigger:
+  alertname: PodImagePullBackOff
+  service: cart-service
+  namespace: prod
+  pod: cart-service-9d8c7b6a45-h3jqt
+evidence:
+  get_pod_status:
+    name: cart-service-9d8c7b6a45-h3jqt
+    namespace: prod
+    phase: Running
+    startTime: "2026-09-30T05:11:09Z"
+    containerStatuses:
+      - name: cart
+        ready: true
+        restartCount: 0
+        image: "registry.internal:5000/cart:v4.0.7"
+        state:
+          running:
+            startedAt: "2026-09-30T05:12:31Z"
+  get_events:
+    - type: Normal
+      reason: Scheduled
+      count: 1
+      message: "Successfully assigned prod/cart-service-9d8c7b6a45-h3jqt to kind-worker2"
+    - type: Normal
+      reason: Pulling
+      count: 2
+      message: 'Pulling image "registry.internal:5000/cart:v4.0.7"'
+    - type: Warning
+      reason: Failed
+      count: 1
+      message: 'Failed to pull image "registry.internal:5000/cart:v4.0.7": rpc error: code = Unknown desc = failed to copy: read tcp 172.18.0.3:47122->172.18.0.5:5000: read: connection reset by peer'
+    - type: Normal
+      reason: Pulled
+      count: 1
+      message: 'Successfully pulled image "registry.internal:5000/cart:v4.0.7" in 12.482s (12.482s including waiting)'
+    - type: Normal
+      reason: Created
+      count: 1
+      message: "Created container cart"
+    - type: Normal
+      reason: Started
+      count: 1
+      message: "Started container cart"
+  get_logs:
+    current: |
+      2026-09-30T05:12:31Z INFO  cart listening on :8080
+      2026-09-30T05:12:31Z INFO  connected to cart-db
+      2026-09-30T05:17:04Z INFO  handled 1284 requests in the last 5m
+    previous: null
+  get_deployment_spec:
+    metadata:
+      name: cart-service
+      namespace: prod
+      generation: 19
+    spec:
+      replicas: 3
+      strategy:
+        type: RollingUpdate
+        rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+      selector:
+        matchLabels: {app: cart-service}
+      template:
+        metadata:
+          labels: {app: cart-service}
+        spec:
+          imagePullSecrets:
+            - name: regcred
+          containers:
+            - name: cart
+              image: "registry.internal:5000/cart:v4.0.7"
+              ports: [{containerPort: 8080}]
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {memory: 512Mi}
+              readinessProbe:
+                httpGet: {path: /healthz, port: 8080}
+                initialDelaySeconds: 5
+    status:
+      replicas: 3
+      readyReplicas: 3
+      updatedReplicas: 3
+      unavailableReplicas: 0
+      conditions:
+        - {type: Available, status: "True"}
+        - type: Progressing
+          status: "True"
+          reason: NewReplicaSetAvailable
+          message: 'ReplicaSet "cart-service-9d8c7b6a45" has successfully progressed.'
+  get_service:
+    metadata: {name: cart-service, namespace: prod}
+    spec:
+      selector: {app: cart-service}
+      ports: [{port: 80, targetPort: 8080, protocol: TCP}]
+  get_endpoints:
+    metadata: {name: cart-service, namespace: prod}
+    subsets:
+      - addresses: [{ip: 10.244.2.12}, {ip: 10.244.1.30}, {ip: 10.244.2.19}]
+        ports: [{port: 8080}]
+  get_pvc_status: not available
+  get_node_status:
+    - name: kind-worker2
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+expected:
+  category: no_fault
+  root_cause: "A single pull attempt was reset by the registry and the retry succeeded. The pod is Running and Ready, all three replicas are available, and the alert had already resolved."
+  fix_check:
+    path: "*"
+    must_exist: false
+metadata:
+  source: manual
+  k8s_version: "1.30"
+  runtime: containerd
+  recorded: 2026-09-30
+  note: "Negative control (HLD §8.1 case 05) - catches an agent that pattern-matches the alert name."

@@ -1,0 +1,108 @@
+case_id: imagepull-rate-limited-01
+split: dev
+trigger:
+  alertname: PodImagePullBackOff
+  service: notification-service
+  namespace: prod
+  pod: notification-service-84b6c7d995-q7wdx
+evidence:
+  get_pod_status:
+    name: notification-service-84b6c7d995-q7wdx
+    namespace: prod
+    phase: Pending
+    startTime: "2026-09-30T07:21:55Z"
+    containerStatuses:
+      - name: redis
+        ready: false
+        restartCount: 0
+        image: "docker.io/library/redis:7.2"
+        state:
+          waiting:
+            reason: ImagePullBackOff
+            message: 'Back-off pulling image "docker.io/library/redis:7.2"'
+  get_events:
+    - type: Normal
+      reason: Scheduled
+      count: 1
+      message: "Successfully assigned prod/notification-service-84b6c7d995-q7wdx to kind-worker"
+    - type: Normal
+      reason: Pulling
+      count: 6
+      message: 'Pulling image "docker.io/library/redis:7.2"'
+    - type: Warning
+      reason: Failed
+      count: 6
+      message: 'Failed to pull image "docker.io/library/redis:7.2": rpc error: code = Unknown desc = failed to pull and unpack image "docker.io/library/redis:7.2": failed to copy: httpReadSeeker: failed open: unexpected status code 429 Too Many Requests - Server message: toomanyrequests: You have reached your pull rate limit. You may increase the limit by authenticating and upgrading: https://www.docker.com/increase-rate-limit'
+    - type: Warning
+      reason: Failed
+      count: 6
+      message: "Error: ErrImagePull"
+    - type: Normal
+      reason: BackOff
+      count: 18
+      message: 'Back-off pulling image "docker.io/library/redis:7.2"'
+  get_logs:
+    current: 'Error from server (BadRequest): container "redis" in pod "notification-service-84b6c7d995-q7wdx" is waiting to start: trying and failing to pull image'
+    previous: null
+  get_deployment_spec:
+    metadata:
+      name: notification-service
+      namespace: prod
+      generation: 21
+    spec:
+      replicas: 1
+      strategy:
+        type: RollingUpdate
+        rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+      selector:
+        matchLabels: {app: notification-service}
+      template:
+        metadata:
+          labels: {app: notification-service}
+        spec:
+          containers:
+            - name: redis
+              image: "docker.io/library/redis:7.2"
+              ports: [{containerPort: 6379}]
+              resources:
+                requests: {cpu: 100m, memory: 128Mi}
+                limits: {memory: 256Mi}
+    status:
+      replicas: 2
+      readyReplicas: 1
+      updatedReplicas: 1
+      unavailableReplicas: 1
+      conditions:
+        - {type: Available, status: "True"}
+        - type: Progressing
+          status: "True"
+          reason: ReplicaSetUpdated
+          message: 'ReplicaSet "notification-service-84b6c7d995" is progressing.'
+  get_service:
+    metadata: {name: notification-service, namespace: prod}
+    spec:
+      selector: {app: notification-service}
+      ports: [{port: 6379, targetPort: 6379, protocol: TCP}]
+  get_endpoints:
+    metadata: {name: notification-service, namespace: prod}
+    subsets:
+      - addresses: [{ip: 10.244.1.77}]
+        ports: [{port: 6379}]
+  get_pvc_status: not available
+  get_node_status:
+    - name: kind-worker
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+expected:
+  category: registry_rate_limited
+  root_cause: "Anonymous pulls from Docker Hub have hit the shared per-IP rate limit; the registry returns 429 toomanyrequests. The image reference itself is valid."
+  fix_check:
+    path: spec.template.spec.imagePullSecrets
+    must_exist: true
+metadata:
+  source: manual
+  k8s_version: "1.30"
+  runtime: containerd
+  recorded: 2026-09-30
+  note: "Cannot be injected live (HLD §5.1) - this category exists only as a recorded case."

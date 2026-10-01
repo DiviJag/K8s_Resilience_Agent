@@ -1,0 +1,113 @@
+case_id: imagepull-auth-missing-01
+split: dev
+trigger:
+  alertname: PodImagePullBackOff
+  service: payment-service
+  namespace: prod
+  pod: payment-service-7d9f8c6b54-2xkzq
+evidence:
+  get_pod_status:
+    name: payment-service-7d9f8c6b54-2xkzq
+    namespace: prod
+    phase: Pending
+    startTime: "2026-09-29T11:02:41Z"
+    containerStatuses:
+      - name: payment
+        ready: false
+        restartCount: 0
+        image: "registry.internal:5000/payment:v1.8.2"
+        state:
+          waiting:
+            reason: ImagePullBackOff
+            message: 'Back-off pulling image "registry.internal:5000/payment:v1.8.2"'
+  get_events:
+    - type: Normal
+      reason: Scheduled
+      count: 1
+      message: "Successfully assigned prod/payment-service-7d9f8c6b54-2xkzq to kind-worker"
+    - type: Normal
+      reason: Pulling
+      count: 3
+      message: 'Pulling image "registry.internal:5000/payment:v1.8.2"'
+    - type: Warning
+      reason: Failed
+      count: 3
+      message: 'Failed to pull image "registry.internal:5000/payment:v1.8.2": rpc error: code = Unknown desc = failed to pull and unpack image "registry.internal:5000/payment:v1.8.2": failed to resolve reference "registry.internal:5000/payment:v1.8.2": pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: authorization failed'
+    - type: Warning
+      reason: Failed
+      count: 3
+      message: "Error: ErrImagePull"
+    - type: Normal
+      reason: BackOff
+      count: 9
+      message: 'Back-off pulling image "registry.internal:5000/payment:v1.8.2"'
+  get_logs:
+    current: 'Error from server (BadRequest): container "payment" in pod "payment-service-7d9f8c6b54-2xkzq" is waiting to start: image can''t be pulled'
+    previous: null
+  get_deployment_spec:
+    metadata:
+      name: payment-service
+      namespace: prod
+      generation: 34
+    spec:
+      replicas: 2
+      strategy:
+        type: RollingUpdate
+        rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+      selector:
+        matchLabels: {app: payment-service}
+      template:
+        metadata:
+          labels: {app: payment-service}
+        spec:
+          serviceAccountName: payment
+          containers:
+            - name: payment
+              image: "registry.internal:5000/payment:v1.8.2"
+              ports: [{containerPort: 8080}]
+              env:
+                - {name: LOG_LEVEL, value: info}
+                - name: DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef: {name: payment-db, key: password}
+              resources:
+                requests: {cpu: 200m, memory: 256Mi}
+                limits: {memory: 512Mi}
+    status:
+      replicas: 3
+      readyReplicas: 2
+      updatedReplicas: 1
+      unavailableReplicas: 1
+      conditions:
+        - {type: Available, status: "True"}
+        - type: Progressing
+          status: "True"
+          reason: ReplicaSetUpdated
+          message: 'ReplicaSet "payment-service-7d9f8c6b54" is progressing.'
+  get_service:
+    metadata: {name: payment-service, namespace: prod}
+    spec:
+      selector: {app: payment-service}
+      ports: [{port: 80, targetPort: 8080, protocol: TCP}]
+  get_endpoints:
+    metadata: {name: payment-service, namespace: prod}
+    subsets:
+      - addresses: [{ip: 10.244.2.31}, {ip: 10.244.1.44}]
+        ports: [{port: 8080}]
+  get_pvc_status: not available
+  get_node_status:
+    - name: kind-worker
+      conditions: [{type: Ready, status: "True"}]
+      taints: []
+      allocatable: {cpu: "4", memory: 8038084Ki, pods: "110"}
+expected:
+  category: registry_auth_missing
+  root_cause: "The pod spec has no imagePullSecrets, so the kubelet pulls anonymously from the private registry registry.internal:5000, which denies access."
+  fix_check:
+    path: spec.template.spec.imagePullSecrets
+    must_exist: true
+metadata:
+  source: manual
+  k8s_version: "1.30"
+  runtime: containerd
+  recorded: 2026-09-30
