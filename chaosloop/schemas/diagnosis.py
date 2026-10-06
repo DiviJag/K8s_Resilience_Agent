@@ -17,6 +17,9 @@ class Fix(BaseModel):
 
     summary: str
     patch: str
+    # Which object the patch applies to, as Kind/name. Without it a cascading fault is
+    # ambiguous - `spec.selector` could be the alerting service's or its upstream's.
+    target: str | None = None
 
 
 class Diagnosis(BaseModel):

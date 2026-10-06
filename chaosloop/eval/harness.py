@@ -47,6 +47,19 @@ class CalibrationSummary(BaseModel):
     gap: float
 
 
+class LiveMetrics(BaseModel):
+    """Tier B measures that offline replay cannot produce (HLD §6.3, §7.3)."""
+
+    n_experiments: int
+    n_aborted: int
+    detection_miss_rate: float
+    mean_time_to_detect_s: float | None
+    mean_time_to_diagnose_s: float | None
+    n_fix_attempts: int
+    fix_success_rate: float | None
+    mean_time_to_recover_s: float | None
+
+
 class Metrics(BaseModel):
     n_cases: int
     n_repeats: int
@@ -65,6 +78,18 @@ class Metrics(BaseModel):
     memory_usage_rate: float | None = None
     calibration: dict[str, CalibrationSummary] = {}
     by_category: dict[str, dict[str, float | None]] = {}
+    live: LiveMetrics | None = None
+
+
+def is_attempted(record: EvalRecord) -> bool:
+    """Reached the model and was not aborted before the fault took effect."""
+    return not is_provider_error(record) and record.aborted is None
+
+
+def is_graded(record: EvalRecord) -> bool:
+    """Has a diagnosis to grade. A live fault no alert ever caught produced no investigation;
+    it counts against detection, not against diagnosis accuracy."""
+    return is_attempted(record) and record.detected is not False
 
 
 def is_provider_error(record: EvalRecord) -> bool:
@@ -322,20 +347,24 @@ def summarize(records: list[EvalRecord]) -> Metrics:
         return empty
 
     total = len(records)
-    scored = [r for r in records if not is_provider_error(r)]
+    provider_errors = sum(1 for r in records if is_provider_error(r))
+    attempted = [r for r in records if is_attempted(r)]
+    scored = [r for r in attempted if is_graded(r)]
     negatives = [r for r in scored if r.expected_category is Category.NO_FAULT]
     judged = [r.root_cause_score for r in scored if r.root_cause_score is not None]
     with_memory = [r for r in scored if r.memory_snapshot is not None]
+    live = [r for r in attempted if r.tier == "B"]
 
     by_category: dict[str, dict[str, float | None]] = {}
-    for category in sorted({r.expected_category.value for r in scored}):
+    for category in sorted({r.expected_category.value for r in attempted}):
         rows = [r for r in scored if r.expected_category.value == category]
+        live_rows = [r for r in live if r.expected_category.value == category]
         confident = [r for r in rows if r.confidence is not None]
         scores = [r.root_cause_score for r in rows if r.root_cause_score is not None]
         by_category[category] = {
             "runs": float(len(rows)),
-            "category_accuracy": _ratio([r.category_correct for r in rows]),
-            "fix_accuracy": _ratio([r.fix_correct for r in rows]),
+            "category_accuracy": _ratio([r.category_correct for r in rows]) if rows else None,
+            "fix_accuracy": _ratio([r.fix_correct for r in rows]) if rows else None,
             "mean_confidence": (
                 sum(r.confidence or 0.0 for r in confident) / len(confident) if confident else None
             ),
@@ -346,6 +375,9 @@ def summarize(records: list[EvalRecord]) -> Metrics:
                 else None
             ),
             "root_cause_score": sum(scores) / len(scores) if scores else None,
+            "detection_miss": (
+                _ratio([r.detected is False for r in live_rows]) if live_rows else None
+            ),
         }
 
     return empty.model_copy(
@@ -354,12 +386,13 @@ def summarize(records: list[EvalRecord]) -> Metrics:
             "n_repeats": max(r.repeat for r in records),
             "n_runs": total,
             "n_scored": len(scored),
-            "n_errors": total - len(scored),
+            "n_errors": provider_errors,
             "category_accuracy": _ratio([r.category_correct for r in scored]),
             "fix_accuracy": _ratio([r.fix_correct for r in scored]),
             "false_positive_rate": _ratio([r.is_false_positive for r in negatives]),
             "malformed_rate": _ratio([r.malformed for r in scored]),
-            "error_rate": (total - len(scored)) / total,
+            "error_rate": provider_errors / total,
+            "live": live_metrics(records) if any(r.tier == "B" for r in records) else None,
             "mean_cost_usd": sum(r.cost_usd for r in records) / total,
             "mean_latency_s": sum(r.latency_s for r in records) / total,
             "total_cost_usd": sum(r.cost_usd + r.judge_cost_usd for r in records),
@@ -372,6 +405,34 @@ def summarize(records: list[EvalRecord]) -> Metrics:
             "calibration": calibration_summaries(scored),
             "by_category": by_category,
         }
+    )
+
+
+def live_metrics(records: list[EvalRecord]) -> LiveMetrics:
+    live = [r for r in records if r.tier == "B" and not is_provider_error(r)]
+    attempted = [r for r in live if r.aborted is None]
+    detected = [r for r in attempted if r.detected]
+    attempts = [r for r in attempted if r.fix_verified is not None]
+    recovered = [r for r in attempts if r.fix_verified and r.t_recover is not None]
+
+    def mean(values: list[float]) -> float | None:
+        return sum(values) / len(values) if values else None
+
+    return LiveMetrics(
+        n_experiments=len(live),
+        n_aborted=len(live) - len(attempted),
+        detection_miss_rate=_ratio([not r.detected for r in attempted]),
+        mean_time_to_detect_s=mean(
+            [r.t_detect - r.t_inject for r in detected if r.t_detect and r.t_inject]
+        ),
+        mean_time_to_diagnose_s=mean(
+            [r.t_diagnose - r.t_detect for r in detected if r.t_diagnose and r.t_detect]
+        ),
+        n_fix_attempts=len(attempts),
+        fix_success_rate=_ratio([bool(r.fix_verified) for r in attempts]) if attempts else None,
+        mean_time_to_recover_s=mean(
+            [r.t_recover - r.t_inject for r in recovered if r.t_recover and r.t_inject]
+        ),
     )
 
 

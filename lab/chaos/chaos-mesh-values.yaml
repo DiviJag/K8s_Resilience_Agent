@@ -1,0 +1,13 @@
+# chaos-mesh/chaos-mesh for the lab: the network faults (DNSChaos, NetworkChaos) that a
+# manifest edit cannot produce. Config faults stay with chaosloop's own mutator.
+chaosDaemon:
+  # kind nodes run containerd, not Docker.
+  runtime: containerd
+  socketPath: /run/containerd/containerd.sock
+controllerManager:
+  replicaCount: 1
+dashboard:
+  create: false
+# DNSChaos needs Chaos Mesh's own DNS server in front of CoreDNS.
+dnsServer:
+  create: true

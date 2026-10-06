@@ -5,7 +5,6 @@ cluster or to recorded evidence. Step, token and cost budgets are enforced here 
 merely requested in the prompt (HLD §11).
 """
 
-import re
 import time
 from typing import Any, Protocol
 
@@ -19,9 +18,6 @@ from chaosloop.schemas.taxonomy import Category
 from chaosloop.schemas.trigger import Trigger
 from chaosloop.tools.interface import TOOL_SPECS, ToolBackend, dispatch
 from chaosloop.tools.sanitize import wrap_untrusted
-
-_FENCE_START = re.compile(r"^```[a-zA-Z]*\s*")
-_FENCE_END = re.compile(r"\s*```$")
 
 SEARCH_MEMORY = "search_memory"
 
@@ -63,7 +59,11 @@ class MemorySearch(Protocol):
 
 
 class Budget(BaseModel):
-    max_steps: int = 8
+    # 12, not 8: a live incident spanning a caller and its upstream (checkout -> cart) needs
+    # steps on both sides - read the caller's logs, confirm the upstream is healthy, check
+    # endpoints and network policies - and 8 cut those investigations off mid-gather. It is a
+    # ceiling, not a target; the prompt still says to stop as soon as a conclusion is justified.
+    max_steps: int = 12
     max_tokens: int = 40_000
     max_cost_usd: float = 0.50
 
@@ -203,7 +203,12 @@ class Diagnostician:
             trace.consistency = agree / len(trace.samples)
 
     def _exhausted(self, trace: DiagnosticTrace) -> str | None:
-        if trace.tokens["total"] >= self.budget.max_tokens:
+        # Budget on billable tokens, not total: the whole conversation is re-sent every step,
+        # so `total` counts the same evidence once per step. With prompt caching those re-reads
+        # are cache hits that cost almost nothing - charging full price for them exhausted the
+        # budget on live evidence (large logs and events) long before the step limit.
+        billable = trace.tokens["prompt"] - trace.tokens["cached"] + trace.tokens["completion"]
+        if billable >= self.budget.max_tokens:
             return "max_tokens"
         if trace.cost_usd >= self.budget.max_cost_usd:
             return "max_cost_usd"
@@ -246,8 +251,42 @@ class Diagnostician:
 def parse_diagnosis(content: str | None) -> Diagnosis:
     if not content or not content.strip():
         raise ValueError("final message was empty")
-    text = _FENCE_END.sub("", _FENCE_START.sub("", content.strip()))
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end <= start:
+    candidates = _json_objects(content)
+    if not candidates:
         raise ValueError("final message contained no JSON object")
-    return Diagnosis.model_validate_json(text[start : end + 1])
+    # The real answer is the last valid object: models that disobey "JSON only" tend to think in
+    # prose first (e.g. a bare `{port: 9999}` mid-sentence) and put the actual diagnosis last.
+    last_error: Exception | None = None
+    for blob in reversed(candidates):
+        try:
+            return Diagnosis.model_validate_json(blob)
+        except (ValidationError, ValueError) as exc:
+            last_error = exc
+    raise last_error if last_error else ValueError("no JSON object validated as a diagnosis")
+
+
+def _json_objects(text: str) -> list[str]:
+    """Every top-level {...} in the text, brace-matched and ignoring braces inside strings, so a
+    diagnosis survives stray prose, markdown fences or a snippet the model wrote before it."""
+    objects: list[str] = []
+    depth = start = 0
+    in_string = escaped = False
+    for i, ch in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}" and depth > 0:
+            depth -= 1
+            if depth == 0:
+                objects.append(text[start : i + 1])
+    return objects

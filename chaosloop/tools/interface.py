@@ -76,6 +76,16 @@ _TOOL_DEFS: list[dict[str, Any]] = [
         "required": ["namespace", "name"],
     },
     {
+        "name": "get_network_policies",
+        "description": (
+            "NetworkPolicies in the namespace: which pods each selects and the ingress/egress "
+            "it allows. A policy that selects a healthy pod but allows no ingress is why that "
+            "pod's callers are dropped while the pod itself looks fine."
+        ),
+        "properties": {"namespace": _NS},
+        "required": ["namespace"],
+    },
+    {
         "name": "get_pvc_status",
         "description": "PersistentVolumeClaim phase, storage class and bind status.",
         "properties": {"namespace": _NS, "name": {"type": "string", "description": "PVC name"}},
@@ -155,6 +165,9 @@ class ToolBackend(ABC):
 
     @abstractmethod
     def get_endpoints(self, namespace: str, name: str) -> Any: ...
+
+    @abstractmethod
+    def get_network_policies(self, namespace: str) -> Any: ...
 
     @abstractmethod
     def get_pvc_status(self, namespace: str, name: str) -> Any: ...

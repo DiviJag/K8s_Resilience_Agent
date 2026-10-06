@@ -9,5 +9,9 @@ containerdConfigPatches:
       config_path = "/etc/containerd/certs.d"
 nodes:
   - role: control-plane
+    # Prometheus and Alertmanager NodePorts, reachable from this machine only.
+    extraPortMappings:
+      - {containerPort: 30090, hostPort: 9090, listenAddress: "127.0.0.1"}
+      - {containerPort: 30093, hostPort: 9093, listenAddress: "127.0.0.1"}
   - role: worker
   - role: worker

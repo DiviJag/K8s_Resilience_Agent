@@ -1,0 +1,186 @@
+# prometheus-community/prometheus for the lab (HLD §3, §9): Prometheus, Alertmanager and
+# kube-state-metrics. Detection is real: the lifecycle controller learns about a fault only
+# when one of the alerts below reaches Alertmanager, so time to detect measures this file.
+#
+# Rules are symptom-level on purpose (crash looping, unschedulable, upstream errors), never
+# cause-level: an alert that named the root cause would hand the agent its answer. Every rule
+# sets `service`, which is what the trigger normalizer groups incidents by.
+#
+# Windows on range functions add up to their width to time-to-recover: an alert built on
+# max_over_time(...[1m]) keeps firing for about a minute after the fix. TTR therefore measures
+# recovery as monitoring sees it, the same way TTD measures detection.
+
+server:
+  global:
+    scrape_interval: 15s
+    evaluation_interval: 15s
+  retention: 1d
+  persistentVolume:
+    enabled: false
+  service:
+    type: NodePort
+    nodePort: 30090
+
+alertmanager:
+  enabled: true
+  persistence:
+    enabled: false
+  service:
+    type: NodePort
+    nodePort: 30093
+  config:
+    global:
+      resolve_timeout: 1m
+    route:
+      receiver: "null"
+      # One incident per (namespace, service), matching the normalizer's grouping.
+      group_by: [namespace, service]
+      group_wait: 10s
+      group_interval: 30s
+      repeat_interval: 4h
+    receivers:
+      - name: "null"
+
+kube-state-metrics:
+  # Scraped by the dedicated job below instead, with honor_labels: the annotation-driven job
+  # would stamp its own namespace/service labels over the pod's.
+  prometheusScrape: false
+
+prometheus-node-exporter:
+  enabled: false
+
+prometheus-pushgateway:
+  enabled: false
+
+extraScrapeConfigs: |
+  - job_name: kube-state-metrics
+    honor_labels: true
+    static_configs:
+      - targets: [prometheus-kube-state-metrics.monitoring.svc:8080]
+  - job_name: chaosloop-upstream
+    metrics_path: /metrics.txt
+    # busybox httpd serves the exposition as a plain file; Prometheus 3 otherwise refuses a
+    # response whose content type it cannot negotiate.
+    fallback_scrape_protocol: PrometheusText0.0.4
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [chaosloop-lab]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_container_port_name]
+        regex: metrics
+        action: keep
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        target_label: service
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+
+serverFiles:
+  alerting_rules.yml:
+    groups:
+      - name: chaosloop-lab
+        rules:
+          - alert: PodCrashLooping
+            expr: |
+              label_replace(
+                max by (namespace, pod) (
+                  max_over_time(kube_pod_container_status_waiting_reason{namespace="chaosloop-lab", reason="CrashLoopBackOff"}[1m])
+                ) == 1,
+                "service", "$1", "pod", "(.+)-[a-z0-9]+-[a-z0-9]{5}"
+              )
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ $labels.pod }} is crash looping"
+
+          - alert: PodImagePullBackOff
+            expr: |
+              label_replace(
+                max by (namespace, pod) (
+                  max_over_time(kube_pod_container_status_waiting_reason{namespace="chaosloop-lab", reason=~"ErrImagePull|ImagePullBackOff"}[1m])
+                ) == 1,
+                "service", "$1", "pod", "(.+)-[a-z0-9]+-[a-z0-9]{5}"
+              )
+            for: 30s
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ $labels.pod }} cannot pull its image"
+
+          - alert: PodOOMKilled
+            # last_terminated_reason persists while the pod lives; the restart window keeps a
+            # long-recovered pod from firing forever.
+            expr: |
+              label_replace(
+                max by (namespace, pod) (
+                  (kube_pod_container_status_last_terminated_reason{namespace="chaosloop-lab", reason="OOMKilled"} == 1)
+                  and on (namespace, pod, container)
+                  (increase(kube_pod_container_status_restarts_total{namespace="chaosloop-lab"}[10m]) > 0)
+                ),
+                "service", "$1", "pod", "(.+)-[a-z0-9]+-[a-z0-9]{5}"
+              )
+            labels:
+              severity: warning
+            annotations:
+              summary: "Container in {{ $labels.pod }} was OOM-killed"
+
+          - alert: PodUnschedulable
+            expr: |
+              label_replace(
+                kube_pod_status_unschedulable{namespace="chaosloop-lab"} == 1,
+                "service", "$1", "pod", "(.+)-[a-z0-9]+-[a-z0-9]{5}"
+              )
+            for: 30s
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ $labels.pod }} cannot be scheduled"
+
+          - alert: PodNotReady
+            expr: |
+              label_replace(
+                kube_pod_status_ready{namespace="chaosloop-lab", condition="false"} == 1,
+                "service", "$1", "pod", "(.+)-[a-z0-9]+-[a-z0-9]{5}"
+              )
+            for: 1m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ $labels.pod }} has not been Ready for a minute"
+
+          - alert: DeploymentReplicasMismatch
+            expr: |
+              label_replace(
+                kube_deployment_spec_replicas{namespace="chaosloop-lab"}
+                  != kube_deployment_status_replicas_available{namespace="chaosloop-lab"},
+                "service", "$1", "deployment", "(.+)"
+              )
+            for: 1m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Deployment {{ $labels.deployment }} has fewer available replicas than desired"
+
+          - alert: UpstreamErrors
+            expr: |
+              sum by (namespace, service, upstream) (
+                increase(chaosloop_upstream_requests_total{namespace="chaosloop-lab", result!="ok"}[1m])
+              ) > 2
+            for: 30s
+            labels:
+              severity: warning
+            annotations:
+              summary: "{{ $labels.service }} is failing calls to {{ $labels.upstream }}"
+
+          - alert: UpstreamSlow
+            expr: |
+              max by (namespace, service, upstream) (
+                avg_over_time(chaosloop_upstream_latency_ms{namespace="chaosloop-lab"}[1m])
+              ) > 1000
+            for: 30s
+            labels:
+              severity: warning
+            annotations:
+              summary: "{{ $labels.service }} calls to {{ $labels.upstream }} average over 1s"

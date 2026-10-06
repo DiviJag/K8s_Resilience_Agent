@@ -1,0 +1,66 @@
+# A real client of cart-service. Service, DNS and network faults are invisible from the broken
+# side (cart's pods stay Running), so they have to be seen where a user would see them: in the
+# caller. It requests http://cart-service/ every 2s, logs every failure verbatim, and exports
+#   chaosloop_upstream_requests_total{upstream, result=ok|error|dns_error}   counter
+#   chaosloop_upstream_latency_ms{upstream}                                  gauge (last success)
+# on :9100/metrics.txt for Prometheus. Latency is only updated on success, so a timeout reads
+# as an error, not as a slow call.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-frontend
+  namespace: chaosloop-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: checkout-frontend
+  template:
+    metadata:
+      labels:
+        app: checkout-frontend
+    spec:
+      containers:
+        - name: checkout
+          image: localhost:5001/busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /www
+              ok=0; failed=0; dns=0; latency=0
+              write_metrics() {
+                {
+                  echo "# TYPE chaosloop_upstream_requests_total counter"
+                  echo "chaosloop_upstream_requests_total{upstream=\"cart-service\",result=\"ok\"} $ok"
+                  echo "chaosloop_upstream_requests_total{upstream=\"cart-service\",result=\"error\"} $failed"
+                  echo "chaosloop_upstream_requests_total{upstream=\"cart-service\",result=\"dns_error\"} $dns"
+                  echo "# TYPE chaosloop_upstream_latency_ms gauge"
+                  echo "chaosloop_upstream_latency_ms{upstream=\"cart-service\"} $latency"
+                } > /www/metrics.tmp && mv /www/metrics.tmp /www/metrics.txt
+              }
+              write_metrics
+              httpd -p 9100 -h /www
+              echo "[checkout] calling http://cart-service/ every 2s"
+              while true; do
+                read up rest < /proc/uptime; t0=${up%.*}${up#*.}
+                out=$(wget -q -T 10 -O /dev/null http://cart-service/ 2>&1); rc=$?
+                read up rest < /proc/uptime; t1=${up%.*}${up#*.}
+                took=$(( (t1 - t0) * 10 ))
+                if [ "$rc" -eq 0 ]; then
+                  ok=$((ok + 1)); latency=$took
+                else
+                  case "$out" in
+                    *"bad address"*) dns=$((dns + 1)) ;;
+                    *) failed=$((failed + 1)) ;;
+                  esac
+                  echo "[checkout] GET http://cart-service/ failed after ${took}ms: $out"
+                fi
+                write_metrics
+                sleep 2
+              done
+          ports:
+            - name: metrics
+              containerPort: 9100
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}

@@ -168,3 +168,55 @@ def test_trace_steps_flatten_calls_results_and_answer():
         ]
     )
     assert [s["kind"] for s in steps] == ["system", "user", "call", "tool", "answer"]
+
+
+def test_live_run_page_shows_the_lifecycle(tmp_path: Path):
+    from chaosloop.schemas.eval_record import EvalRecord
+
+    base = dict(
+        run_id="20261002T090000Z-live01", tier="B", repeat=1, model="oracle",
+        prompt_version="oracle", golden_version="cat:sha256:abc", fix_correct=True,
+        is_false_positive=False, malformed=False, confidence=1.0,
+    )
+    records = [
+        EvalRecord(**base, case_id="cart-high-latency", experiment_id="cart-high-latency",
+                   parameters={"latency_ms": 2500}, expected_category="high_latency",
+                   agent_category="high_latency", category_correct=True, detected=True,
+                   trigger_alertname="UpstreamSlow", t_inject=100.0, t_detect=160.0,
+                   t_diagnose=161.0, t_recover=250.0, fix_applied=True, fix_verified=True),
+        EvalRecord(**base, case_id="cart-quota-exceeded", experiment_id="cart-quota-exceeded",
+                   expected_category="quota_exceeded", agent_category=None,
+                   category_correct=False, detected=False, error="detection_miss",
+                   t_inject=300.0),
+    ]
+    runs = tmp_path / "runs"
+    write_records(records, runs / "20261002T090000Z-live01.jsonl")
+    client = TestClient(create_app(runs))
+
+    page = client.get("/runs/20261002T090000Z-live01")
+    assert page.status_code == 200, page.text
+    assert "Live lifecycle" in page.text and "live chaos (Tier B)" in page.text
+    assert "latency_ms=2500" in page.text and "UpstreamSlow" in page.text
+    assert "60 s" in page.text and "150 s" in page.text  # detect, recover
+    assert "&#10007; missed" in page.text
+    assert "live" in client.get("/").text
+
+
+def test_live_runs_are_not_judged_against_the_tier_a_gate(tmp_path: Path):
+    from chaosloop.schemas.eval_record import EvalRecord
+
+    record = EvalRecord(
+        run_id="20261002T090000Z-live02", case_id="x", experiment_id="x", tier="B", repeat=1,
+        model="oracle", prompt_version="oracle", golden_version="cat",
+        expected_category="pvc_unbound",
+        agent_category="pvc_unbound", category_correct=True, fix_correct=True,
+        is_false_positive=False, malformed=False, confidence=1.0, detected=True,
+    )
+    write_records([record], tmp_path / "runs" / "20261002T090000Z-live02.jsonl")
+    thresholds = tmp_path / "thresholds.yaml"
+    thresholds.write_text("category_accuracy_min: 0.5\nfix_accuracy_min: 0.5\n"
+                          "false_positive_rate_max: 0.2\n")
+    page = TestClient(create_app(tmp_path / "runs", thresholds)).get(
+        "/runs/20261002T090000Z-live02"
+    )
+    assert "gate" not in page.text.lower()

@@ -1,12 +1,14 @@
 #requires -Version 5.1
 <#
-Tears down the lab cluster. The registry container is left running by default so repeated
-lab-up cycles do not re-pull images; pass -RemoveRegistry to delete it too.
+Tears down the lab cluster. The registry containers are left running by default so repeated
+lab-up cycles do not re-pull images; pass -RemoveRegistry to delete them too. Leftover
+experiment journals (lab/.journal) are cleared with the cluster they described.
 #>
 [CmdletBinding()]
 param(
     [string]$ClusterName = "chaosloop",
     [string]$RegistryName = "chaosloop-registry",
+    [string]$AuthRegistryName = "chaosloop-registry-auth",
     [switch]$RemoveRegistry
 )
 
@@ -27,11 +29,16 @@ else {
     Write-Host "cluster $ClusterName is not running"
 }
 
+$journal = Join-Path (Split-Path -Parent $PSScriptRoot) "lab\.journal"
+Remove-Item -Recurse -Force $journal -ErrorAction SilentlyContinue
+
 if ($RemoveRegistry) {
-    Write-Host "==> removing registry $RegistryName" -ForegroundColor Cyan
-    & docker rm -f $RegistryName | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "failed to remove $RegistryName" }
+    foreach ($name in @($RegistryName, $AuthRegistryName)) {
+        Write-Host "==> removing registry $name" -ForegroundColor Cyan
+        & docker rm -f $name | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "failed to remove $name" }
+    }
 }
 else {
-    Write-Host "registry $RegistryName left running (pass -RemoveRegistry to delete it)"
+    Write-Host "registries left running (pass -RemoveRegistry to delete them)"
 }

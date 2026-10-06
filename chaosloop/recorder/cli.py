@@ -3,7 +3,7 @@
 Run this straight after injecting a fault, while the evidence is still in the cluster:
 events expire (HLD §12), so the snapshot has to be taken at detection time.
 
-    lab/faults/inject.ps1 -Category registry_auth_missing
+    chaosloop-lab inject cart-registry-auth-missing
     uv run chaosloop-record capture --service cart-service --category registry_auth_missing \
         --root-cause "No imagePullSecrets for the private registry" \
         --fix-path spec.template.spec.imagePullSecrets

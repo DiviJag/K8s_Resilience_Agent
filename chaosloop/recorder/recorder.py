@@ -40,6 +40,7 @@ class Recorder:
             "get_deployment_spec": {"namespace": namespace, "name": deployment},
             "get_service": {"namespace": namespace, "name": service},
             "get_endpoints": {"namespace": namespace, "name": service},
+            "get_network_policies": {"namespace": namespace},
             "get_pvc_status": {"namespace": namespace, "name": pvc} if pvc else None,
             "get_node_status": {"node": node},
         }

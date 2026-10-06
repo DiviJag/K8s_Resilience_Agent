@@ -1,0 +1,72 @@
+# The lifecycle controller's identity (HLD §11): it injects faults, applies verified fixes and
+# rolls back, so it can write - but only the object kinds the catalog touches, only in the lab
+# namespace, plus node taints. It never reads Secrets. lab-up.ps1 mints a short-lived token for
+# this account into lab/.kubeconfig-injector (gitignored).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: injector
+  namespace: chaosloop-lab
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chaosloop-injector
+  namespace: chaosloop-lab
+rules:
+  - apiGroups: [""]
+    resources: [services, configmaps, resourcequotas, persistentvolumeclaims]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+  # Delete too: the controller clears stale events before each experiment so one incident's
+  # evidence never carries into the next (events live an hour).
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [get, list, watch, delete, deletecollection]
+  - apiGroups: ["apps"]
+    resources: [deployments]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: ["networking.k8s.io"]
+    resources: [networkpolicies]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: ["chaos-mesh.org"]
+    resources: [dnschaos, networkchaos]
+    verbs: [get, list, watch, create, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chaosloop-injector
+  namespace: chaosloop-lab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chaosloop-injector
+subjects:
+  - kind: ServiceAccount
+    name: injector
+    namespace: chaosloop-lab
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chaosloop-injector-nodes
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chaosloop-injector-nodes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: chaosloop-injector-nodes
+subjects:
+  - kind: ServiceAccount
+    name: injector
+    namespace: chaosloop-lab

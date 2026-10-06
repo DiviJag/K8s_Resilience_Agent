@@ -38,8 +38,9 @@ spec:
               case "$MAX_WORKERS" in
                 ''|*[!0-9]*) echo "[billing] FATAL config: MAX_WORKERS must be an integer, got '$MAX_WORKERS'"; exit 78 ;;
               esac
+              mkdir -p /www && echo "billing ok" > /www/index.html
               echo "[billing] listening on :8080 with $MAX_WORKERS workers"
-              while true; do sleep 5; done
+              exec httpd -f -p 8080 -h /www
           env:
             - name: DATABASE_URL
               value: postgres://billing-db:5432/billing

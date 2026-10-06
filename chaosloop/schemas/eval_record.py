@@ -57,7 +57,17 @@ class EvalRecord(BaseModel):
     latency_s: float = 0.0
     error: str | None = None
 
-    # Tier B only; unset for offline replay runs.
+    # Tier B only; unset for offline replay runs. Times are epoch seconds (HLD §7.2).
+    experiment_id: str | None = None
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    aborted: str | None = None
+    detected: bool | None = None
+    trigger_alertname: str | None = None
+    fix_applied: bool | None = None
+    # None when there was nothing to verify: no patch proposed, or the fix lives outside the
+    # workload's manifests. A rejected patch counts as a failed fix, not as "nothing to verify".
+    fix_verified: bool | None = None
+    fix_rejected: str | None = None
     t_inject: float | None = None
     t_detect: float | None = None
     t_diagnose: float | None = None

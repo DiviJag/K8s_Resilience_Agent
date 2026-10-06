@@ -22,6 +22,8 @@ chaosloop-eval = "chaosloop.eval.cli:app"
 chaosloop-record = "chaosloop.recorder.cli:app"
 chaosloop-memory = "chaosloop.memory.cli:app"
 chaosloop-dashboard = "chaosloop.dashboard.cli:app"
+chaosloop-lab = "chaosloop.live.cli:app"
+chaosloop-review = "chaosloop.live.cli:review_app"
 
 [dependency-groups]
 dev = [

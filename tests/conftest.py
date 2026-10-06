@@ -23,10 +23,13 @@ class FakeLLMClient:
     actually shown - which is how redaction is verified end to end.
     """
 
-    def __init__(self, script: list[Any], tokens: int = 100, cost: float = 0.001) -> None:
+    def __init__(
+        self, script: list[Any], tokens: int = 100, cost: float = 0.001, cached: int = 0
+    ) -> None:
         self.script = list(script)
         self.tokens = tokens
         self.cost = cost
+        self.cached = cached
         self.seen_messages: list[list[dict[str, Any]]] = []
         self.seen_options: list[dict[str, Any]] = []
         self.seen_tools: list[list[str]] = []
@@ -57,6 +60,7 @@ class FakeLLMClient:
                 content=step,
                 prompt_tokens=self.tokens,
                 completion_tokens=self.tokens // 2,
+                cached_tokens=self.cached,
                 cost_usd=self.cost,
             )
 
@@ -69,6 +73,7 @@ class FakeLLMClient:
             tool_calls=calls,
             prompt_tokens=self.tokens,
             completion_tokens=self.tokens // 5,
+            cached_tokens=self.cached,
             cost_usd=self.cost,
         )
 

@@ -49,7 +49,8 @@ def summarise_run(run_id: str, records: list[EvalRecord]) -> RunSummary:
         run_id=run_id,
         started=_started(run_id),
         model=first.model,
-        splits=sorted({r.split for r in records if r.split}),
+        # Live runs have no golden split; they are labelled as their own kind of run.
+        splits=sorted({r.split or "live" for r in records if r.split or r.tier == "B"}),
         prompt_version=first.prompt_version,
         golden_version=first.golden_version,
         memory_snapshot=first.memory_snapshot,

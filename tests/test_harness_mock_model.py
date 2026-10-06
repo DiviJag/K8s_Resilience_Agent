@@ -233,6 +233,56 @@ def test_parse_diagnosis_tolerates_markdown_fences():
     assert parse_diagnosis(fenced).category is Category.NO_FAULT
 
 
+def test_parse_diagnosis_finds_the_answer_after_prose_and_a_stray_object():
+    # The real failure: the model named the probe port as `{ port: 9999 }` in a sentence, then
+    # gave the diagnosis. First-brace parsing grabbed the snippet and the whole case was lost.
+    content = (
+        "The liveness probe points at `{ port: 9999 }` where nothing listens.\n\n"
+        + diagnosis_json("failing_liveness_probe", patch="")
+    )
+    assert parse_diagnosis(content).category is Category.FAILING_LIVENESS_PROBE
+
+
+def test_parse_diagnosis_ignores_braces_inside_strings():
+    diagnosis = diagnosis_json("bad_config_value", patch="data.MAX_WORKERS: '4'")
+    assert parse_diagnosis(f"Here it is:\n{diagnosis}").category is Category.BAD_CONFIG_VALUE
+
+
+def test_token_budget_counts_billable_not_re_read_tokens():
+    # Every step re-sends the whole conversation, so `total` climbs by the full prompt each time
+    # even though prompt caching makes the re-reads nearly free. Budget must track only the new
+    # (uncached) tokens, or a long but cheap live investigation stops early.
+    backend = ReplayBackend({"get_pod_status": {"phase": "Pending"}})
+    # prompt 1000 of which 950 cached -> 50 new + 200 completion = 250 billable per step.
+    client = FakeLLMClient(
+        script=[[("get_pod_status", {"namespace": "prod", "pod": "p"})]] * 7
+        + [diagnosis_json("insufficient_resources")],
+        tokens=1000,
+        cached=950,
+    )
+    diagnosis, trace = Diagnostician(
+        backend=backend, model="fake/model", client=client,
+        budget=Budget(max_steps=8, max_tokens=4000),
+    ).diagnose(TRIGGER)
+
+    assert trace.error is None  # ~2000 billable over 8 steps stays under 4000
+    assert diagnosis is not None and diagnosis.category is Category.INSUFFICIENT_RESOURCES
+    assert trace.tokens["total"] > 4000  # the naive counter would have tripped the budget
+
+
+def test_token_budget_still_trips_on_genuinely_large_uncached_input():
+    backend = ReplayBackend({"get_pod_status": {"phase": "Pending"}})
+    client = FakeLLMClient(
+        script=[[("get_pod_status", {"namespace": "prod", "pod": "p"})]] * 10,
+        tokens=2000, cached=0,
+    )
+    _, trace = Diagnostician(
+        backend=backend, model="fake/model", client=client,
+        budget=Budget(max_steps=8, max_tokens=4000),
+    ).diagnose(TRIGGER)
+    assert trace.error == "budget_exceeded: max_tokens"
+
+
 def test_thresholds_gate(tmp_path: Path):
     thresholds_file = tmp_path / "thresholds.yaml"
     thresholds_file.write_text(

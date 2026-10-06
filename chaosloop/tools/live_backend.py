@@ -6,14 +6,15 @@ interchangeable - and passed through the same redaction as the Recorder.
 """
 
 import json
-import os
 import re
 from typing import Any
 
+from chaosloop.live.gateway import kubeconfig_path
 from chaosloop.tools.interface import NOT_AVAILABLE, ToolBackend, owned_by
 from chaosloop.tools.redact import redact
 
 MAX_LOG_CHARS = 8_000
+MAX_EVENTS = 25
 LOG_TAIL_LINES = 200
 
 
@@ -21,28 +22,28 @@ class LiveBackend(ToolBackend):
     def __init__(
         self,
         kubeconfig: str | None = None,
-        context: str = "kind-chaosloop",
+        context: str | None = "kind-chaosloop",
         core_api: Any = None,
         apps_api: Any = None,
+        networking_api: Any = None,
     ) -> None:
         if core_api is not None and apps_api is not None:
-            self._core, self._apps = core_api, apps_api
+            self._core, self._apps, self._net = core_api, apps_api, networking_api
             self._exception: type[Exception] = Exception
             return
 
         from kubernetes import client, config
         from kubernetes.client.exceptions import ApiException
 
-        # Resolved explicitly: an empty KUBECONFIG (easy to get from a .env) is read by the
-        # client as a literal empty path rather than as "unset", and fails to find any config.
-        config_file = (
-            kubeconfig
-            or os.environ.get("KUBECONFIG")
-            or os.path.join(os.path.expanduser("~"), ".kube", "config")
+        # A private client, not the library's global config: the lifecycle controller holds an
+        # injector connection and the agent a read-only one in the same process, and a global
+        # config would let whichever loaded last silently grant its rights to the other.
+        api = config.new_client_from_config(
+            config_file=kubeconfig_path(kubeconfig), context=context
         )
-        config.load_kube_config(config_file=config_file, context=context)
-        self._core = client.CoreV1Api()
-        self._apps = client.AppsV1Api()
+        self._core = client.CoreV1Api(api)
+        self._apps = client.AppsV1Api(api)
+        self._net = client.NetworkingV1Api(api)
         self._exception = ApiException
 
     def _guard(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
@@ -92,23 +93,31 @@ class LiveBackend(ToolBackend):
         items = [
             e
             for e in result.items
-            if object_name is None
-            or owned_by(getattr(e.involved_object, "name", "") or "", object_name)
+            if not _from_chaos_tooling(e)
+            and (
+                object_name is None
+                or owned_by(getattr(e.involved_object, "name", "") or "", object_name)
+            )
         ]
-        events = sorted(items, key=lambda e: e.last_timestamp or e.event_time or 0)
-        return redact(
-            [
-                {
-                    "type": e.type,
-                    "reason": e.reason,
-                    "count": e.count,
-                    "message": e.message,
-                    "lastTimestamp": _iso(e.last_timestamp),
-                    "involvedObject": getattr(e.involved_object, "name", None),
-                }
-                for e in events
-            ]
-        )
+        events = sorted(items, key=_event_time)
+        # Newest only: a workload's event history outlives its incidents (events live an hour),
+        # and a long tail of earlier failures both buries the current one and exhausts the
+        # investigation's token budget in a single call.
+        omitted = max(0, len(events) - MAX_EVENTS)
+        shown = [
+            {
+                "type": e.type,
+                "reason": e.reason,
+                "count": e.count,
+                "message": e.message,
+                "lastTimestamp": _iso(e.last_timestamp or e.event_time),
+                "involvedObject": getattr(e.involved_object, "name", None),
+            }
+            for e in events[omitted:]
+        ]
+        if omitted:
+            shown.insert(0, {"omitted": omitted, "note": f"{omitted} older events not shown"})
+        return redact(shown)
 
     def get_logs(self, namespace: str, pod: str, container: str | None = None) -> Any:
         current = self._read_log(namespace, pod, container, previous=False)
@@ -232,6 +241,14 @@ class LiveBackend(ToolBackend):
             }
         )
 
+    def get_network_policies(self, namespace: str) -> Any:
+        if self._net is None:
+            return NOT_AVAILABLE
+        result = self._guard(self._net.list_namespaced_network_policy, namespace=namespace)
+        if isinstance(result, str):
+            return result
+        return redact([_network_policy(p) for p in result.items])
+
     def get_pvc_status(self, namespace: str, name: str) -> Any:
         obj = self._guard(
             self._core.read_namespaced_persistent_volume_claim, name=name, namespace=namespace
@@ -312,6 +329,22 @@ class LiveBackend(ToolBackend):
             node: {"cpu": f"{values['cpu']:.3g}", "memory": f"{values['memory'] / 2**20:.0f}Mi"}
             for node, values in totals.items()
         }
+
+
+def _event_time(event: Any) -> float:
+    stamp = event.last_timestamp or event.event_time
+    return stamp.timestamp() if stamp is not None else 0.0
+
+
+def _from_chaos_tooling(event: Any) -> bool:
+    """Events Chaos Mesh writes about its own experiments name the injected fault outright -
+    the answer key (HLD §11). The agent sees the symptoms, never the experiment."""
+    involved = getattr(event, "involved_object", None)
+    if (getattr(involved, "api_version", "") or "").startswith("chaos-mesh.org"):
+        return True
+    source = getattr(getattr(event, "source", None), "component", "") or ""
+    reporter = getattr(event, "reporting_component", "") or ""
+    return any(name.startswith("chaos") for name in (source, reporter))
 
 
 def _api_message(exc: Any) -> str:
@@ -432,9 +465,47 @@ def _probe(p: Any) -> dict[str, Any] | None:
         probe["httpGet"] = {"path": p.http_get.path, "port": p.http_get.port}
     if p.tcp_socket is not None:
         probe["tcpSocket"] = {"port": p.tcp_socket.port}
-    if p.exec is not None:
-        probe["exec"] = {"command": p.exec.command}
+    # The client names it `_exec` (exec was a Python 2 keyword); fall back for plain objects.
+    exec_action = getattr(p, "_exec", None) or getattr(p, "exec", None)
+    if exec_action is not None:
+        probe["exec"] = {"command": exec_action.command}
     return probe
+
+
+def _netpol_peers(rule: Any, attr: str) -> list[dict[str, Any]]:
+    out = []
+    for peer in getattr(rule, attr, None) or []:
+        pod_sel = peer.pod_selector.match_labels if peer.pod_selector else None
+        ns_sel = peer.namespace_selector.match_labels if peer.namespace_selector else None
+        out.append(
+            {
+                "podSelector": pod_sel,
+                "namespaceSelector": ns_sel,
+                "ipBlock": {"cidr": peer.ip_block.cidr} if peer.ip_block else None,
+            }
+        )
+    return out
+
+
+def _netpol_rule(rule: Any, peers_attr: str, key: str) -> dict[str, Any]:
+    return {
+        key: _netpol_peers(rule, peers_attr),
+        "ports": [{"port": p.port, "protocol": p.protocol} for p in (rule.ports or [])],
+    }
+
+
+def _network_policy(p: Any) -> dict[str, Any]:
+    spec = p.spec
+    selector = spec.pod_selector.match_labels if spec.pod_selector else None
+    # An empty ingress/egress list under a declared policyType is a deny-all; keep the
+    # distinction between "no rules" ([]) and "not restricted" (type absent).
+    return {
+        "name": p.metadata.name,
+        "podSelector": selector if selector is not None else {},
+        "policyTypes": list(spec.policy_types or []),
+        "ingress": [_netpol_rule(r, "_from", "from") for r in (spec.ingress or [])],
+        "egress": [_netpol_rule(r, "to", "to") for r in (spec.egress or [])],
+    }
 
 
 def _volume(v: Any) -> dict[str, Any]:

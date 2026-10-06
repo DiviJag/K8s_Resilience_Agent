@@ -48,6 +48,9 @@ class ReplayBackend(ToolBackend):
     def get_endpoints(self, namespace: str, name: str) -> Any:
         return self._lookup("get_endpoints", name)
 
+    def get_network_policies(self, namespace: str) -> Any:
+        return self._lookup("get_network_policies")
+
     def get_pvc_status(self, namespace: str, name: str) -> Any:
         return self._lookup("get_pvc_status", name)
 

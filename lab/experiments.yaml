@@ -1,0 +1,452 @@
+# Live fault catalog (HLD §3, §10). The Planner picks only from this file and only sets
+# parameters to the values listed for them; it never writes manifests.
+#
+# Each entry carries the ground truth (category, root_cause, fix_check) and a reference_fix.
+# An oracle run proposes the reference fix: if the service does not then recover, the
+# experiment is broken, not the agent. All objects live in chaosloop-lab.
+#
+# Not planned (plannable: false - inject by hand for recording only):
+#   registry_unreachable  - injecting it means pointing the image at a bad host, whose right fix
+#                           is "correct the image"; the category is about infrastructure.
+#   progress_deadline_exceeded - overlaps every other category until the taxonomy decides.
+# Not here at all:
+#   registry_rate_limited - cannot be produced on demand.
+#   memory_leak           - a real leak needs hours; recorded cases cover it.
+
+experiments:
+
+  - id: billing-missing-env-var
+    category: missing_env_var
+    injector: config
+    service: billing-service
+    blast_radius: [billing-service]
+    mutations:
+      - action: patch
+        target: {kind: Deployment, name: billing-service}
+        ops:
+          - {op: replace, path: /spec/template/spec/containers/0/env, value: []}
+    root_cause: >-
+      The billing container exits at startup because DATABASE_URL is required and the pod spec
+      no longer sets it.
+    fix_check: {path: spec.template.spec.containers.env}
+    reference_fix:
+      summary: Restore the DATABASE_URL environment variable.
+      target: Deployment/billing-service
+      patch: >-
+        spec.template.spec.containers[0].env: [{name: DATABASE_URL, value: "postgres://billing-db:5432/billing"}]
+
+  - id: billing-bad-config-value
+    category: bad_config_value
+    injector: config
+    service: billing-service
+    blast_radius: [billing-service]
+    mutations:
+      - action: patch
+        target: {kind: ConfigMap, name: billing-config}
+        ops:
+          - {op: replace, path: /data/MAX_WORKERS, value: many}
+      - action: restart
+        target: {kind: Deployment, name: billing-service}
+    root_cause: >-
+      The billing-config ConfigMap sets MAX_WORKERS to the non-integer 'many', which billing
+      rejects at startup with exit code 78.
+    fix_check: {path: data.MAX_WORKERS, any_of: [spec.template.spec.containers.env]}
+    reference_fix:
+      summary: Set MAX_WORKERS back to an integer.
+      target: ConfigMap/billing-config
+      patch: 'data.MAX_WORKERS: "4"'
+    # Crash-looping pods only re-read the ConfigMap on their next restart, which back-off
+    # can delay by up to five minutes.
+    recover_timeout_s: 480
+
+  - id: billing-failing-liveness-probe
+    category: failing_liveness_probe
+    injector: config
+    service: billing-service
+    blast_radius: [billing-service]
+    mutations:
+      - action: patch
+        target: {kind: Deployment, name: billing-service}
+        ops:
+          - op: add
+            path: /spec/template/spec/containers/0/livenessProbe
+            value: {tcpSocket: {port: 9999}, initialDelaySeconds: 5, periodSeconds: 5, failureThreshold: 1}
+    root_cause: >-
+      A liveness probe on port 9999, where nothing listens, fails, so the kubelet keeps killing
+      an otherwise healthy billing container that serves on 8080.
+    fix_check: {path: spec.template.spec.containers.livenessProbe}
+    reference_fix:
+      summary: Point the liveness probe at the port billing serves on.
+      target: Deployment/billing-service
+      patch: 'spec.template.spec.containers[0].livenessProbe.tcpSocket.port: 8080'
+    recover_timeout_s: 420
+
+  - id: cart-image-tag-not-found
+    category: image_tag_not_found
+    injector: config
+    service: cart-service
+    blast_radius: [cart-service, checkout-frontend]
+    mutations:
+      - action: patch
+        target: {kind: Deployment, name: cart-service}
+        ops:
+          - {op: replace, path: /spec/template/spec/containers/0/image, value: "localhost:5001/cart:v9.9.9"}
+    root_cause: >-
+      The cart deployment references image tag v9.9.9, which was never pushed to the local
+      registry.
+    fix_check: {path: spec.template.spec.containers.image}
+    reference_fix:
+      summary: Roll the image back to the published tag.
+      target: Deployment/cart-service
+      patch: 'spec.template.spec.containers[0].image: "localhost:5001/cart:v1.0.0"'
+
+  - id: cart-registry-auth-missing
+    category: registry_auth_missing
+    injector: config
+    service: cart-service
+    blast_radius: [cart-service, checkout-frontend]
+    # The registry's in-network name, not a localhost:5002 mirror: containerd only sends pull
+    # credentials to the host they were issued for, so a mirror would refuse even the fix.
+    mutations:
+      - action: patch
+        target: {kind: Deployment, name: cart-service}
+        ops:
+          - {op: replace, path: /spec/template/spec/containers/0/image, value: "chaosloop-registry-auth:5000/cart:v1.0.0"}
+    root_cause: >-
+      The cart image now comes from the authenticated registry chaosloop-registry-auth:5000, but
+      the pod spec has no imagePullSecrets, so the pull is anonymous and refused.
+    fix_check: {path: spec.template.spec.imagePullSecrets}
+    reference_fix:
+      summary: Add the registry pull secret.
+      target: Deployment/cart-service
+      patch: 'spec.template.spec.imagePullSecrets: [{name: regcred}]'
+
+  - id: analytics-memory-limit-too-low
+    category: memory_limit_too_low
+    injector: config
+    service: analytics-worker
+    blast_radius: [analytics-worker]
+    mutations:
+      - action: patch
+        target: {kind: Deployment, name: analytics-worker}
+        ops:
+          - {op: replace, path: /spec/template/spec/containers/0/env/0/value, value: "256"}
+    root_cause: >-
+      analytics-worker now keeps a 256MB working set in memory-backed storage, far over its 96Mi
+      limit, so the kernel OOM-kills it at startup.
+    fix_check: {path: spec.template.spec.containers.resources.limits.memory, any_of: [spec.template.spec.containers.env]}
+    reference_fix:
+      summary: Raise the memory limit above the working set.
+      target: Deployment/analytics-worker
+      patch: 'spec.template.spec.containers[0].resources.limits.memory: 512Mi'
+
+  - id: analytics-insufficient-resources
+    category: insufficient_resources
+    injector: config
+    service: analytics-worker
+    blast_radius: [analytics-worker]
+    mutations:
+      - action: patch
+        target: {kind: Deployment, name: analytics-worker}
+        ops:
+          - {op: replace, path: /spec/template/spec/containers/0/resources/requests/memory, value: 64Gi}
+          - {op: replace, path: /spec/template/spec/containers/0/resources/limits/memory, value: 64Gi}
+    root_cause: >-
+      analytics-worker requests 64Gi of memory, more than any node can allocate, so the
+      scheduler cannot place it.
+    fix_check: {path: spec.template.spec.containers.resources.requests.memory}
+    reference_fix:
+      summary: Size the memory request to what a node can hold.
+      target: Deployment/analytics-worker
+      patch: 'spec.template.spec.containers[0].resources: {requests: {cpu: 10m, memory: 32Mi}, limits: {memory: 96Mi}}'
+
+  - id: analytics-node-selector-mismatch
+    category: node_selector_mismatch
+    injector: config
+    service: analytics-worker
+    blast_radius: [analytics-worker]
+    mutations:
+      - action: patch
+        target: {kind: Deployment, name: analytics-worker}
+        ops:
+          - {op: add, path: /spec/template/spec/nodeSelector, value: {accelerator: nvidia-t4}}
+    root_cause: >-
+      The pod requires nodeSelector accelerator=nvidia-t4 but no node carries that label.
+    fix_check: {path: spec.template.spec.nodeSelector}
+    reference_fix:
+      summary: Drop the node selector no node satisfies.
+      target: Deployment/analytics-worker
+      patch: 'spec.template.spec.nodeSelector: {}'
+
+  - id: analytics-taint-not-tolerated
+    category: taint_not_tolerated
+    injector: config
+    service: analytics-worker
+    blast_radius: [analytics-worker]
+    mutations:
+      - action: taint_workers
+        taint: {key: chaosloop, value: experiment, effect: NoSchedule}
+      - action: restart
+        target: {kind: Deployment, name: analytics-worker}
+    root_cause: >-
+      Both worker nodes carry the taint chaosloop=experiment:NoSchedule and the pod has no
+      matching toleration; the control-plane node is excluded by its usual taint.
+    fix_check: {path: spec.template.spec.tolerations}
+    reference_fix:
+      summary: Tolerate the worker taint.
+      target: Deployment/analytics-worker
+      patch: 'spec.template.spec.tolerations: [{key: chaosloop, operator: Equal, value: experiment, effect: NoSchedule}]'
+
+  - id: reporting-pvc-unbound
+    category: pvc_unbound
+    injector: config
+    service: reporting-service
+    blast_radius: [reporting-service]
+    mutations:
+      - action: create
+        manifest:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata: {name: reporting-data-broken, namespace: chaosloop-lab}
+          spec:
+            accessModes: [ReadWriteOnce]
+            storageClassName: chaosloop-nonexistent
+            resources: {requests: {storage: 128Mi}}
+      - action: patch
+        target: {kind: Deployment, name: reporting-service}
+        ops:
+          - {op: replace, path: /spec/template/spec/volumes/0/persistentVolumeClaim/claimName, value: reporting-data-broken}
+    root_cause: >-
+      reporting-service mounts claim reporting-data-broken, whose storage class does not exist,
+      so the claim never binds and the pod cannot be scheduled.
+    fix_check: {path: spec.storageClassName, any_of: [spec.template.spec.volumes]}
+    reference_fix:
+      summary: Mount the bound claim instead.
+      target: Deployment/reporting-service
+      patch: 'spec.template.spec.volumes[0].persistentVolumeClaim.claimName: reporting-data'
+
+  - id: cart-quota-exceeded
+    category: quota_exceeded
+    injector: config
+    service: cart-service
+    blast_radius: [cart-service]
+    mutations:
+      - action: freeze_pod_quota
+      - action: patch
+        target: {kind: Deployment, name: cart-service}
+        ops:
+          - {op: replace, path: /spec/replicas, value: 4}
+    root_cause: >-
+      A ResourceQuota caps the namespace at the pods already running, so the ReplicaSet cannot
+      create the extra cart pods the deployment was scaled to.
+    fix_check: {path: spec.hard.pods, any_of: [spec.replicas]}
+    reference_fix:
+      summary: Scale back within the quota.
+      target: Deployment/cart-service
+      patch: 'spec.replicas: 2'
+
+  - id: cart-selector-mismatch
+    category: selector_mismatch
+    injector: config
+    service: checkout-frontend
+    blast_radius: [cart-service, checkout-frontend]
+    mutations:
+      - action: patch
+        target: {kind: Service, name: cart-service}
+        ops:
+          - {op: replace, path: /spec/selector, value: {app: cart-service-v2}}
+    root_cause: >-
+      checkout-frontend is fine; its upstream Service cart-service selects app=cart-service-v2
+      while the cart pods are labelled app=cart-service, so the Service has no endpoints.
+    fix_check: {path: spec.selector}
+    reference_fix:
+      summary: Point the cart-service selector back at the cart pods.
+      target: Service/cart-service
+      patch: 'spec.selector: {app: cart-service}'
+
+  - id: cart-target-port-mismatch
+    category: target_port_mismatch
+    injector: config
+    service: checkout-frontend
+    blast_radius: [cart-service, checkout-frontend]
+    mutations:
+      - action: patch
+        target: {kind: Service, name: cart-service}
+        ops:
+          - {op: replace, path: /spec/ports/0/targetPort, value: 9999}
+    root_cause: >-
+      checkout-frontend is fine; the cart-service Service forwards to targetPort 9999 while cart
+      listens on 8080, so every connection is refused.
+    fix_check: {path: spec.ports.targetPort}
+    reference_fix:
+      summary: Forward to the port cart listens on.
+      target: Service/cart-service
+      patch: 'spec.ports[0].targetPort: 8080'
+
+  - id: cart-network-policy-block
+    category: network_policy_block
+    injector: config
+    service: checkout-frontend
+    blast_radius: [cart-service, checkout-frontend]
+    mutations:
+      - action: create
+        manifest:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata: {name: cart-ingress-lockdown, namespace: chaosloop-lab}
+          spec:
+            podSelector: {matchLabels: {app: cart-service}}
+            policyTypes: [Ingress]
+            ingress: []
+    root_cause: >-
+      The NetworkPolicy cart-ingress-lockdown selects the cart pods and allows no ingress, so
+      checkout-frontend's connections to cart-service are dropped.
+    fix_check: {path: spec.ingress}
+    reference_fix:
+      summary: Allow ingress to cart from checkout-frontend.
+      target: NetworkPolicy/cart-ingress-lockdown
+      patch: 'spec.ingress: [{from: [{podSelector: {matchLabels: {app: checkout-frontend}}}]}]'
+
+  - id: reporting-readiness-misconfigured
+    category: readiness_probe_misconfigured
+    injector: config
+    service: reporting-service
+    blast_radius: [reporting-service]
+    mutations:
+      - action: patch
+        target: {kind: Deployment, name: reporting-service}
+        ops:
+          - {op: replace, path: /spec/template/spec/containers/0/readinessProbe/tcpSocket/port, value: 9999}
+    root_cause: >-
+      The reporting readiness probe checks port 9999 but the container listens on 8080, so the
+      pod never becomes Ready.
+    fix_check: {path: spec.template.spec.containers.readinessProbe}
+    reference_fix:
+      summary: Probe the port reporting serves on.
+      target: Deployment/reporting-service
+      patch: 'spec.template.spec.containers[0].readinessProbe.tcpSocket.port: 8080'
+
+  - id: frontend-dns-resolution-failure
+    category: dns_resolution_failure
+    injector: chaos
+    service: checkout-frontend
+    blast_radius: [checkout-frontend]
+    mutations:
+      - action: create
+        manifest:
+          apiVersion: chaos-mesh.org/v1alpha1
+          kind: DNSChaos
+          metadata: {name: chaosloop-dns-error, namespace: chaosloop-lab}
+          spec:
+            action: error
+            mode: all
+            patterns: [cart-service, "cart-service.*"]
+            selector:
+              namespaces: [chaosloop-lab]
+              labelSelectors: {app: checkout-frontend}
+    root_cause: >-
+      checkout-frontend cannot resolve cart-service: name lookups from its pods fail, while the
+      cart Service and pods are healthy.
+    fix_check: {path: "*", must_exist: false}
+    reference_fix:
+      summary: Repair cluster DNS resolution for checkout-frontend; no manifest change.
+
+  - id: frontend-network-partition
+    category: network_partition
+    injector: chaos
+    service: checkout-frontend
+    blast_radius: [checkout-frontend]
+    mutations:
+      - action: create
+        manifest:
+          apiVersion: chaos-mesh.org/v1alpha1
+          kind: NetworkChaos
+          metadata: {name: chaosloop-partition, namespace: chaosloop-lab}
+          spec:
+            action: partition
+            mode: all
+            direction: to
+            selector:
+              namespaces: [chaosloop-lab]
+              labelSelectors: {app: checkout-frontend}
+            target:
+              mode: all
+              selector:
+                namespaces: [chaosloop-lab]
+                labelSelectors: {app: cart-service}
+    root_cause: >-
+      Traffic from checkout-frontend to the cart pods is dropped in the network: names resolve
+      and cart is healthy, but connections time out.
+    fix_check: {path: "*", must_exist: false}
+    reference_fix:
+      summary: Restore network connectivity between checkout-frontend and cart; no manifest change.
+
+  - id: cart-high-latency
+    category: high_latency
+    injector: chaos
+    service: checkout-frontend
+    blast_radius: [checkout-frontend]
+    parameters:
+      latency_ms: {default: 1800, allowed: [1200, 1800, 2500]}
+    mutations:
+      - action: create
+        manifest:
+          apiVersion: chaos-mesh.org/v1alpha1
+          kind: NetworkChaos
+          metadata: {name: chaosloop-delay, namespace: chaosloop-lab}
+          spec:
+            action: delay
+            mode: all
+            selector:
+              namespaces: [chaosloop-lab]
+              labelSelectors: {app: cart-service}
+            delay: {latency: "${latency_ms}ms", jitter: 100ms, correlation: "0"}
+    root_cause: >-
+      Responses from cart are delayed by about ${latency_ms}ms in the network, so
+      checkout-frontend's requests succeed slowly rather than fail.
+    fix_check: {path: "*", must_exist: false}
+    reference_fix:
+      summary: Remove the network delay on the cart pods; no manifest change.
+
+  # --- recording only ---------------------------------------------------------------------
+
+  - id: cart-registry-unreachable
+    category: registry_unreachable
+    injector: config
+    plannable: false
+    service: cart-service
+    blast_radius: [cart-service, checkout-frontend]
+    mutations:
+      - action: patch
+        target: {kind: Deployment, name: cart-service}
+        ops:
+          - {op: replace, path: /spec/template/spec/containers/0/image, value: "registry.invalid.chaosloop.local/cart:v1.0.0"}
+    root_cause: >-
+      The cart image is pulled from registry.invalid.chaosloop.local, a host that does not
+      resolve, so every pull fails before reaching a registry.
+    fix_check: {path: spec.template.spec.containers.image}
+    reference_fix:
+      summary: Pull from the lab registry again.
+      target: Deployment/cart-service
+      patch: 'spec.template.spec.containers[0].image: "localhost:5001/cart:v1.0.0"'
+
+  - id: cart-progress-deadline-exceeded
+    category: progress_deadline_exceeded
+    injector: config
+    plannable: false
+    service: cart-service
+    blast_radius: [cart-service, checkout-frontend]
+    mutations:
+      - action: patch
+        target: {kind: Deployment, name: cart-service}
+        ops:
+          - {op: replace, path: /spec/progressDeadlineSeconds, value: 30}
+          - {op: replace, path: /spec/template/spec/containers/0/image, value: "localhost:5001/cart:v9.9.9"}
+    root_cause: >-
+      The cart rollout cannot make progress (its new image tag does not exist) and exceeds its
+      30s progressDeadlineSeconds, so the Deployment reports ProgressDeadlineExceeded.
+    fix_check: {path: spec.template.spec.containers.image}
+    reference_fix:
+      summary: Roll the image back so the rollout can finish.
+      target: Deployment/cart-service
+      patch: 'spec.template.spec.containers[0].image: "localhost:5001/cart:v1.0.0"'

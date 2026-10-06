@@ -2,7 +2,7 @@
 {% block title %}Runs - ChaosLoop{% endblock %}
 {% block content %}
 <h1>Eval runs</h1>
-<p class="lede">Each run replays the golden set through the agent and grades every answer. Reported numbers come from the test split; dev is for tuning.</p>
+<p class="lede">Tier A runs replay the golden set through the agent and grade every answer; reported numbers come from the test split, and dev is for tuning. Live runs (Tier B) inject real faults into the lab cluster and also time detection, diagnosis and recovery.</p>
 
 {% if runs %}
 <section class="card">

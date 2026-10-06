@@ -1,5 +1,6 @@
 # Pulls from the local registry, so image_tag_not_found / registry_auth_missing /
-# registry_unreachable can be injected by rewriting the image reference alone.
+# registry_unreachable can be injected by rewriting the image reference alone. Serves HTTP on
+# 8080 for checkout-frontend, which is how Service and network faults become visible.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,8 +22,9 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
+              mkdir -p /www && echo "cart ok" > /www/index.html
               echo "[cart] listening on :8080"
-              while true; do sleep 5; done
+              exec httpd -f -p 8080 -h /www
           ports:
             - containerPort: 8080
           resources:

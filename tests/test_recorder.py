@@ -52,6 +52,9 @@ class StubBackend(ToolBackend):
     def get_endpoints(self, namespace, name):
         return self._record("get_endpoints", {"subsets": []})
 
+    def get_network_policies(self, namespace):
+        return self._record("get_network_policies", [])
+
     def get_pvc_status(self, namespace, name):
         return self._record("get_pvc_status", {"status": {"phase": "Bound"}})
 

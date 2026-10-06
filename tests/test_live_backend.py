@@ -265,6 +265,33 @@ def test_events_include_owned_objects_but_not_neighbours():
     assert [e["message"] for e in events] == ["exceeded quota: pods=4", "pod event"]
 
 
+def test_chaos_mesh_events_never_reach_the_agent():
+    """They name the injected fault outright - the answer key (HLD §11)."""
+
+    def event(message: str, **extra) -> NS:
+        return NS(
+            type="Warning", reason="X", count=1, message=message, last_timestamp=STARTED,
+            event_time=None,
+            involved_object=extra.get("involved", NS(name="cart-service-6d4f8797f6-2lcfw",
+                                                     api_version="v1")),
+            source=NS(component=extra.get("component", "kubelet")),
+            reporting_component=extra.get("reporter", ""),
+        )
+
+    class Core(FakeCore):
+        def list_namespaced_event(self, namespace, field_selector=None):
+            return NS(items=[
+                event("Liveness probe failed"),
+                event("NetworkChaos cart-partition applied",
+                      involved=NS(name="cart-partition", api_version="chaos-mesh.org/v1alpha1")),
+                event("injected network delay", component="chaos-daemon"),
+                event("experiment started", reporter="chaos-controller-manager"),
+            ])
+
+    events = LiveBackend(core_api=Core(), apps_api=FakeApps()).get_events("ns")
+    assert [e["message"] for e in events] == ["Liveness probe failed"]
+
+
 def test_deployment_projection_keeps_diagnostic_fields(backend: LiveBackend):
     spec = backend.get_deployment_spec("chaosloop-lab", "cart-service")
     pod_spec = spec["spec"]["template"]["spec"]
@@ -304,3 +331,93 @@ def test_node_status_reports_requests_against_allocatable(backend: LiveBackend):
 )
 def test_quantity_parsing(value, expected):
     assert _quantity(value) == pytest.approx(expected)
+
+
+def test_only_the_newest_events_are_returned():
+    """An hour of earlier incidents on the same workload must not bury the current one or
+    exhaust the investigation's token budget."""
+    from datetime import timedelta
+
+    from chaosloop.tools.live_backend import MAX_EVENTS
+
+    def event(i: int) -> NS:
+        return NS(
+            type="Warning", reason="X", count=1, message=f"event {i}",
+            last_timestamp=STARTED + timedelta(seconds=i) if i % 2 else None,
+            event_time=None if i % 2 else STARTED + timedelta(seconds=i),
+            involved_object=NS(name="cart-service-6d4f8797f6-2lcfw", api_version="v1"),
+        )
+
+    total = MAX_EVENTS + 40
+
+    class Core(FakeCore):
+        def list_namespaced_event(self, namespace, field_selector=None):
+            return NS(items=[event(i) for i in reversed(range(total))])
+
+    events = LiveBackend(core_api=Core(), apps_api=FakeApps()).get_events("ns", "cart-service")
+    assert events[0] == {"omitted": 40, "note": "40 older events not shown"}
+    assert [e["message"] for e in events[1:]] == [f"event {i}" for i in range(40, total)]
+    assert all(e["lastTimestamp"] for e in events[1:])  # eventTime stands in when needed
+
+
+def test_probes_project_with_the_real_client_models():
+    """The client calls the exec action `_exec`; a plain stand-in object would hide that."""
+    from kubernetes.client import V1ExecAction, V1Probe, V1TCPSocketAction
+
+    from chaosloop.tools.live_backend import _probe
+
+    probe = _probe(V1Probe(_exec=V1ExecAction(command=["cat", "/tmp/ok"])))
+    assert probe["exec"] == {"command": ["cat", "/tmp/ok"]}
+    tcp = _probe(V1Probe(tcp_socket=V1TCPSocketAction(port=9999)))
+    assert tcp["tcpSocket"] == {"port": 9999} and "exec" not in tcp
+
+
+def test_network_policies_projection_shows_deny_all_and_allowed_peers():
+
+    class Net:
+        def list_namespaced_network_policy(self, namespace):
+            lockdown = NS(
+                metadata=NS(name="cart-ingress-lockdown"),
+                spec=NS(
+                    pod_selector=NS(match_labels={"app": "cart-service"}),
+                    policy_types=["Ingress"],
+                    ingress=[],  # deny-all: the signal for network_policy_block
+                    egress=None,
+                ),
+            )
+            allow = NS(
+                metadata=NS(name="allow-frontend"),
+                spec=NS(
+                    pod_selector=NS(match_labels={"app": "cart-service"}),
+                    policy_types=["Ingress"],
+                    ingress=[NS(
+                        _from=[NS(
+                            pod_selector=NS(match_labels={"app": "checkout-frontend"}),
+                            namespace_selector=None, ip_block=None,
+                        )],
+                        ports=[NS(port=8080, protocol="TCP")],
+                    )],
+                    egress=None,
+                ),
+            )
+            return NS(items=[lockdown, allow])
+
+    backend = LiveBackend(core_api=FakeCore(), apps_api=FakeApps(), networking_api=Net())
+    policies = backend.get_network_policies("chaosloop-lab")
+
+    assert policies[0] == {
+        "name": "cart-ingress-lockdown",
+        "podSelector": {"app": "cart-service"},
+        "policyTypes": ["Ingress"],
+        "ingress": [],
+        "egress": [],
+    }
+    assert policies[1]["ingress"][0]["from"][0]["podSelector"] == {"app": "checkout-frontend"}
+    assert policies[1]["ingress"][0]["ports"] == [{"port": 8080, "protocol": "TCP"}]
+
+
+def test_network_policies_unavailable_without_a_networking_client():
+    from chaosloop.tools.interface import NOT_AVAILABLE
+    assert LiveBackend(core_api=FakeCore(), apps_api=FakeApps()).get_network_policies("ns") == (
+        NOT_AVAILABLE
+    )

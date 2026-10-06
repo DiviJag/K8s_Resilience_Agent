@@ -15,11 +15,11 @@
 <div class="crumbs"><a href="{{ url_for('index') }}">Runs</a> /</div>
 <h1>{{ summary.run_id }}</h1>
 <div class="meta">
-  {% for split in summary.splits %}<span class="chip split-{{ split }}">{{ split }} split</span>{% endfor %}
+  {% for split in summary.splits %}<span class="chip split-{{ split }}">{% if split == "live" %}live chaos (Tier B){% else %}{{ split }} split{% endif %}</span>{% endfor %}
   {% if summary.memory_snapshot %}<span class="chip memory-on">memory <code>{{ summary.memory_snapshot }}</code></span>{% else %}<span class="chip">memory off</span>{% endif %}
   <span class="chip">model <code>{{ summary.model }}</code></span>
   <span class="chip">prompt <code>{{ summary.prompt_version }}</code></span>
-  <span class="chip">golden <code>{{ summary.golden_version }}</code></span>
+  <span class="chip">{{ "catalog" if "live" in summary.splits else "golden" }} <code>{{ summary.golden_version }}</code></span>
 </div>
 
 {% if m.n_errors %}
@@ -32,6 +32,42 @@
   {% else %}
   <div class="banner success"><span class="icon">&#10003;</span><span>Meets every gate in <code>golden/thresholds.yaml</code>.</span></div>
   {% endif %}
+{% endif %}
+
+{% if m.live %}
+{% set lv = m.live %}
+<section class="card">
+  <h2>Live lifecycle</h2>
+  <p class="muted">Each experiment ran inject, detect, diagnose, fix, roll back on the lab cluster. Detection is Prometheus and Alertmanager; recovery is when the blast radius is healthy and its alerts have cleared.</p>
+  <div class="tiles">
+    <div class="tile"><div class="label">Experiments</div><div class="value">{{ lv.n_experiments }}</div><div class="note">{{ lv.n_aborted }} aborted before injection or for blast radius</div></div>
+    <div class="tile"><div class="label">Detection miss</div><div class="value">{{ lv.detection_miss_rate | pct }}</div><div class="note">no alert before the timeout</div></div>
+    <div class="tile"><div class="label">Time to detect</div><div class="value">{{ lv.mean_time_to_detect_s | secs }}</div><div class="note">injection to first alert</div></div>
+    <div class="tile"><div class="label">Time to diagnose</div><div class="value">{{ lv.mean_time_to_diagnose_s | secs }}</div><div class="note">alert to diagnosis</div></div>
+    <div class="tile"><div class="label">Fix success</div><div class="value">{{ lv.fix_success_rate | pct }}</div><div class="note">{{ lv.n_fix_attempts }} fixes proposed for a manifest</div></div>
+    <div class="tile"><div class="label">Time to recover</div><div class="value">{{ lv.mean_time_to_recover_s | secs }}</div><div class="note">injection to healthy, verified fixes</div></div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Experiment</th><th class="num">Repeat</th><th>Parameters</th><th>Alert</th><th class="num">Detect</th><th class="num">Diagnose</th><th>Fix</th><th class="num">Recover</th><th>Note</th></tr></thead>
+      <tbody>
+        {% for r in records %}
+        <tr>
+          <td>{{ r.experiment_id or r.case_id }}</td>
+          <td class="num">{{ r.repeat }}</td>
+          <td class="muted">{% for k, v in r.parameters.items() %}{{ k }}={{ v }} {% else %}-{% endfor %}</td>
+          <td>{{ r.trigger_alertname or "-" }}</td>
+          <td class="num">{{ since(r.t_detect, r.t_inject) | secs }}</td>
+          <td class="num">{{ since(r.t_diagnose, r.t_detect) | secs }}</td>
+          <td>{{ fix_outcome(r) }}</td>
+          <td class="num">{{ since(r.t_recover, r.t_inject) | secs }}</td>
+          <td class="muted">{{ r.aborted or r.fix_rejected or (r.error if r.error and r.error != "detection_miss" else "") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
 {% endif %}
 
 <div class="tiles">
@@ -131,7 +167,7 @@
         <tr>
           <td><a href="{{ url_for('trace_page', run_id=summary.run_id, case_id=r.case_id, repeat=r.repeat) }}">{{ r.case_id }}</a></td>
           <td class="num">{{ r.repeat }}</td>
-          <td><span class="status {{ o }}">{% if o == "pass" %}&#10003;{% elif o == "fail" %}&#10007;{% elif o == "malformed" %}!{% else %}&ndash;{% endif %} {{ o }}</span></td>
+          <td><span class="status {{ o }}">{% if o == "pass" %}&#10003;{% elif o == "fail" or o == "missed" %}&#10007;{% elif o == "malformed" %}!{% else %}&ndash;{% endif %} {{ o }}</span></td>
           <td>{{ r.expected_category.value }}</td>
           <td>{{ r.agent_category.value if r.agent_category else "-" }}</td>
           <td>{{ "yes" if r.fix_correct else "no" }}</td>

@@ -152,6 +152,7 @@ h2::before {
 .chip code { font-weight: 500; color: var(--text-primary); overflow-wrap: anywhere; }
 .chip.split-test { background: var(--info-bg); color: var(--info-text); border-color: var(--info-border); }
 .chip.split-dev { background: var(--warn-bg); color: var(--warn-text); border-color: var(--warn-border); }
+.chip.split-live { background: rgba(255, 122, 69, 0.14); color: #ff9a6b; border-color: rgba(255, 122, 69, 0.4); }
 .chip.memory-on { background: rgba(155, 140, 255, 0.14); color: #b5abff; border-color: rgba(155, 140, 255, 0.4); }
 
 /* Banners, after the reference's success callout. Always icon + words, never colour alone. */
@@ -239,6 +240,8 @@ tbody tr:hover { background: rgba(255, 75, 75, 0.05); }
 .status.fail { background: var(--bad-bg); color: var(--bad-text); border-color: var(--bad-border); }
 .status.malformed { background: var(--warn-bg); color: var(--warn-text); border-color: var(--warn-border); }
 .status.error { background: var(--surface-3); color: var(--text-muted); border-color: var(--border); }
+.status.missed { background: var(--bad-bg); color: var(--bad-text); border-color: var(--bad-border); }
+.status.aborted { background: var(--warn-bg); color: var(--warn-text); border-color: var(--warn-border); }
 
 .delta { font-weight: 700; font-variant-numeric: tabular-nums; }
 .delta.better { color: var(--good-text); }

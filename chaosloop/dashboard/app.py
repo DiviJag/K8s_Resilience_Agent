@@ -20,6 +20,7 @@ from chaosloop.eval.harness import (
     Metrics,
     Thresholds,
     check_thresholds,
+    is_graded,
     is_provider_error,
     load_thresholds,
 )
@@ -103,7 +104,27 @@ def _signed(value: float | None, places: int = 2) -> str:
     return "-" if value is None else f"{value:+.{places}f}"
 
 
+def _secs(value: float | None) -> str:
+    return "-" if value is None else f"{value:.0f} s"
+
+
+def _since(end: float | None, start: float | None) -> float | None:
+    return end - start if end is not None and start is not None else None
+
+
+def _fix_outcome(record: EvalRecord) -> str:
+    if record.fix_rejected:
+        return "rejected"
+    if record.fix_verified is None:
+        return "-"
+    return "recovered" if record.fix_verified else "not recovered"
+
+
 def _outcome(record: EvalRecord) -> str:
+    if record.aborted:
+        return "aborted"
+    if record.detected is False:
+        return "missed"
     if is_provider_error(record):
         return "error"
     if record.malformed:
@@ -157,7 +178,8 @@ def create_app(runs_dir: Path, thresholds_path: Path | None = None) -> FastAPI:
         else None
     )
     templates = Jinja2Templates(directory=HERE / "templates")
-    templates.env.filters.update(num=_num, pct=_pct, signed=_signed)
+    templates.env.filters.update(num=_num, pct=_pct, signed=_signed, secs=_secs)
+    templates.env.globals.update(since=_since, fix_outcome=_fix_outcome)
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 
     @app.get("/", response_class=HTMLResponse)
@@ -170,8 +192,9 @@ def create_app(runs_dir: Path, thresholds_path: Path | None = None) -> FastAPI:
         if loaded is None:
             raise HTTPException(status_code=404, detail="no such run")
         summary, records = loaded
-        scored = [r for r in records if not is_provider_error(r)]
-        series = reliability_series(scored)
+        series = reliability_series([r for r in records if is_graded(r)])
+        # The CI gate is defined on the golden test split; a live run is a different population.
+        gate = thresholds if "live" not in summary.splits else None
         cases_per_category = {
             category: len({r.case_id for r in records if r.expected_category.value == category})
             for category in summary.metrics.by_category
@@ -187,10 +210,8 @@ def create_app(runs_dir: Path, thresholds_path: Path | None = None) -> FastAPI:
                 "series": series,
                 "chart": Markup(reliability_svg(series)) if series else None,
                 "cases_per_category": cases_per_category,
-                "gates": tile_gates(summary.metrics, thresholds),
-                "violations": (
-                    check_thresholds(summary.metrics, thresholds) if thresholds else None
-                ),
+                "gates": tile_gates(summary.metrics, gate),
+                "violations": check_thresholds(summary.metrics, gate) if gate else None,
             },
         )
 

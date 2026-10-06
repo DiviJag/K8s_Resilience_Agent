@@ -19,3 +19,12 @@ Write-Host "==> lab workloads" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "==> recent warnings" -ForegroundColor Cyan
 & kubectl --context $context -n chaosloop-lab get events --field-selector type=Warning --sort-by=.lastTimestamp
+
+Write-Host ""
+Write-Host "==> monitoring and chaos" -ForegroundColor Cyan
+& kubectl --context $context get pods -n monitoring
+& kubectl --context $context get pods -n chaos-mesh
+
+Write-Host ""
+Write-Host "==> steady state" -ForegroundColor Cyan
+& uv run chaosloop-lab status

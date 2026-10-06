@@ -11,7 +11,7 @@ from chaosloop.schemas.taxonomy import RECORDED_ONLY, SYMPTOM_TO_CATEGORIES, Cat
 from chaosloop.schemas.trigger import Trigger
 from chaosloop.tools.sanitize import UNTRUSTED_NOTICE
 
-PROMPT_VERSION = "v2"
+PROMPT_VERSION = "v4"
 
 
 def _taxonomy_block() -> str:
@@ -47,6 +47,13 @@ while the kubelet is pulling an image is registry_unreachable, because the sympt
 ImagePullBackOff; dns_resolution_failure is for the application's own lookups failing once it is \
 running.
 
+When an application's own calls to a healthy upstream fail - its pods are Running and its \
+Service has endpoints, yet callers see errors - the cause is in the network between them. The \
+caller's logs, the upstream's state and get_network_policies tell the three apart: a \
+NetworkPolicy that selects the upstream and allows none of this traffic (network_policy_block), \
+name resolution failing so the caller never gets an address (dns_resolution_failure), or \
+connections timing out while names resolve and the upstream is healthy (network_partition).
+
 Two categories are always available:
   no_fault - the cluster is actually healthy; the alert was transient or already resolved.
   unknown  - the evidence you were able to gather does not identify a cause.
@@ -81,6 +88,9 @@ Field notes:
   fix.patch  - the concrete change, as a YAML fragment keyed by the spec path it touches,
                e.g. "spec.template.spec.imagePullSecrets: [{{name: regcred}}]".
                For no_fault, use an empty string.
+  fix.target - the object fix.patch applies to, as Kind/name - e.g. Service/cart-service or
+               ConfigMap/billing-config. It matters when the broken object is not the one that
+               alerted. Omit it when fix.patch is empty.
   confidence - your probability that the category is correct, between 0 and 1. Be calibrated:
                reserve values above 0.9 for cases where the evidence is decisive.
 """
