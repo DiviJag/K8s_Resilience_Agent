@@ -220,3 +220,48 @@ def test_live_runs_are_not_judged_against_the_tier_a_gate(tmp_path: Path):
         "/runs/20261002T090000Z-live02"
     )
     assert "gate" not in page.text.lower()
+
+
+def _write_run(runs, run_id, *, model, prompt, golden, split="test", memory=None, tier="A"):
+    from chaosloop.schemas.eval_record import EvalRecord
+    rec = EvalRecord(
+        run_id=run_id, case_id="case-a", tier=tier, repeat=1, model=model, prompt_version=prompt,
+        golden_version=golden, split=split, memory_snapshot=memory,
+        expected_category="missing_env_var", agent_category="missing_env_var",
+        category_correct=True, fix_correct=True, is_false_positive=False, malformed=False,
+        confidence=0.9,
+    )
+    write_records([rec], runs / f"{run_id}.jsonl")
+
+
+def test_run_descriptor_reads_the_runs_config(tmp_path: Path):
+    from chaosloop.dashboard.data import RunStore
+    runs = tmp_path / "runs"
+    _write_run(runs, "20261006T120000Z-aaa", model="anthropic/claude-sonnet-4.5",
+               prompt="v4", golden="g1", split="test", memory=None)
+    summary = RunStore(runs).list_runs()[0]
+    assert summary.descriptor == "test · sonnet-4.5 · v4 · mem off"
+    assert summary.tier == "A"
+
+
+def test_compare_warns_when_run_configs_differ(tmp_path: Path):
+    runs = tmp_path / "runs"
+    _write_run(runs, "20261006T120000Z-base", model="anthropic/claude-sonnet-4.5",
+               prompt="v4", golden="g1")
+    _write_run(runs, "20261006T130000Z-cand", model="openai/gpt-4.1", prompt="v3", golden="g1")
+    client = TestClient(create_app(runs))
+
+    differ = client.get("/compare?baseline=20261006T120000Z-base&candidate=20261006T130000Z-cand")
+    assert "These runs differ in: model, prompt_version" in differ.text
+
+    same = client.get("/compare?baseline=20261006T120000Z-base&candidate=20261006T120000Z-base")
+    assert "These runs differ in:" not in same.text
+
+
+def test_index_options_are_readable_and_carry_filter_attributes(tmp_path: Path):
+    runs = tmp_path / "runs"
+    _write_run(runs, "20261006T120000Z-aaa", model="anthropic/claude-sonnet-4.5",
+               prompt="v4", golden="g1", split="test")
+    page = TestClient(create_app(runs)).get("/").text
+    assert "sonnet-4.5 · v4 · mem off" in page          # readable descriptor, not just a stamp
+    assert 'data-tier="A"' in page and 'data-split="test"' in page and 'data-golden="g1"' in page

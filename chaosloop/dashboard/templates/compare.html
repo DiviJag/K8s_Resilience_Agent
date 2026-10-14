@@ -13,6 +13,9 @@
   <span class="chip">candidate <a href="{{ url_for('run_page', run_id=candidate.run_id) }}">{{ candidate.run_id }}</a></span>
   {% if candidate.memory_snapshot %}<span class="chip memory-on">memory on</span>{% else %}<span class="chip">memory off</span>{% endif %}
 </div>
+{% if mismatches %}
+<div class="banner warning"><span class="icon">!</span><span>These runs differ in: {{ mismatches | join(", ") }}. The changes below may reflect configuration, not a real difference in the agent.</span></div>
+{% endif %}
 {% if not same_cases %}
 <div class="banner warning"><span class="icon">!</span><span>The runs cover different cases, so these changes are not like for like.</span></div>
 {% endif %}

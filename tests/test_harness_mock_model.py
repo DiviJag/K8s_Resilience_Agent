@@ -350,3 +350,24 @@ def test_golden_version_changes_when_a_case_changes(tmp_path: Path):
     before = golden_version(golden)
     path.write_text(path.read_text().replace("expected root cause", "edited root cause"))
     assert golden_version(golden) != before
+
+
+def _run(model="anthropic/claude-sonnet-4.5", prompt="v4", golden="g1", split="test", tier="A"):
+    return [EvalRecord(
+        run_id="r", case_id="c", tier=tier, repeat=1, model=model, prompt_version=prompt,
+        golden_version=golden, split=split, expected_category="missing_env_var",
+        agent_category="missing_env_var", category_correct=True, fix_correct=True,
+        is_false_positive=False, malformed=False, confidence=0.9,
+    )]
+
+
+def test_differing_axes_names_each_changed_axis():
+    from chaosloop.eval.harness import differing_axes
+
+    base = _run()
+    assert differing_axes(base, _run()) == []
+    assert differing_axes(base, _run(model="openai/gpt-4.1")) == ["model"]
+    assert differing_axes(base, _run(prompt="v3")) == ["prompt_version"]
+    assert differing_axes(base, _run(golden="g2")) == ["golden_version"]
+    assert differing_axes(base, _run(split="dev")) == ["split"]
+    assert differing_axes(base, _run(model="x", golden="g2")) == ["model", "golden_version"]

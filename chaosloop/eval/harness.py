@@ -101,6 +101,29 @@ def is_provider_error(record: EvalRecord) -> bool:
     return bool(record.error and record.error.startswith(LLM_ERROR_PREFIX))
 
 
+def run_config(records: list[EvalRecord]) -> dict[str, str]:
+    """The configuration a run was produced under - the axes two runs must share to be
+    compared like for like. model/prompt/golden are constant within a run; split can be a set
+    (and is "live" for a Tier B run, which has no golden split)."""
+    first = records[0]
+    split = "+".join(sorted({r.split or "live" for r in records if r.split or r.tier == "B"}))
+    return {
+        "model": first.model,
+        "prompt_version": first.prompt_version,
+        "golden_version": first.golden_version,
+        "tier": first.tier,
+        "split": split or "-",
+    }
+
+
+def differing_axes(before: list[EvalRecord], after: list[EvalRecord]) -> list[str]:
+    """Which configuration axes differ between two runs; empty means like for like. Shared by
+    the dashboard compare banner and the CLI so the two checks cannot drift apart."""
+    a, b = run_config(before), run_config(after)
+    axes = ("model", "prompt_version", "golden_version", "split")
+    return [axis for axis in axes if a[axis] != b[axis]]
+
+
 class Thresholds(BaseModel):
     category_accuracy_min: float = 0.0
     fix_accuracy_min: float = 0.0

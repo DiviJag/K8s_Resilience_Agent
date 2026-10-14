@@ -19,10 +19,17 @@ from chaosloop.schemas.eval_record import EvalRecord
 _RUN_STAMP = re.compile(r"^(\d{8}T\d{6}Z)-")
 
 
+def _short_model(model: str) -> str:
+    """"anthropic/claude-sonnet-4.5" -> "sonnet-4.5"; leaves "oracle" and the like untouched."""
+    name = model.rsplit("/", 1)[-1].removeprefix("claude-")
+    return name or model
+
+
 class RunSummary(BaseModel):
     run_id: str
     started: datetime | None
     model: str
+    tier: str
     splits: list[str]
     prompt_version: str
     golden_version: str
@@ -34,6 +41,16 @@ class RunSummary(BaseModel):
     @property
     def split_label(self) -> str:
         return "+".join(self.splits) or "-"
+
+    @property
+    def descriptor(self) -> str:
+        """A readable one-line label built from the run's own fields, so it can never drift from
+        the config it was produced under, e.g. "test · sonnet-4.5 · v3 · mem off"."""
+        memory = "on" if self.memory_snapshot else "off"
+        return (
+            f"{self.split_label} · {_short_model(self.model)} · "
+            f"{self.prompt_version} · mem {memory}"
+        )
 
 
 def _started(run_id: str) -> datetime | None:
@@ -49,6 +66,7 @@ def summarise_run(run_id: str, records: list[EvalRecord]) -> RunSummary:
         run_id=run_id,
         started=_started(run_id),
         model=first.model,
+        tier=first.tier,
         # Live runs have no golden split; they are labelled as their own kind of run.
         splits=sorted({r.split or "live" for r in records if r.split or r.tier == "B"}),
         prompt_version=first.prompt_version,

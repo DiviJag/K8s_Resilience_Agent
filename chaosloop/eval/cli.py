@@ -15,6 +15,7 @@ from chaosloop.eval.harness import (
     TierAHarness,
     apply_calibrator,
     check_thresholds,
+    differing_axes,
     is_provider_error,
     load_thresholds,
     read_records,
@@ -204,6 +205,10 @@ def compare(
     base_records, cand_records = read_records(baseline), read_records(candidate)
     base, cand = summarize(base_records), summarize(cand_records)
 
+    axes = differing_axes(base_records, cand_records)
+    if axes:
+        typer.secho(f"warning: the runs differ in: {', '.join(axes)}; deltas may reflect "
+                    "configuration, not a real change", fg=typer.colors.YELLOW)
     base_cases = {r.case_id for r in base_records}
     cand_cases = {r.case_id for r in cand_records}
     if base_cases != cand_cases:

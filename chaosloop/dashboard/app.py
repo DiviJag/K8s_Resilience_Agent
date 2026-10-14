@@ -20,6 +20,7 @@ from chaosloop.eval.harness import (
     Metrics,
     Thresholds,
     check_thresholds,
+    differing_axes,
     is_graded,
     is_provider_error,
     load_thresholds,
@@ -267,6 +268,7 @@ def create_app(runs_dir: Path, thresholds_path: Path | None = None) -> FastAPI:
                 "is_lift": base[0].memory_snapshot is None
                 and cand[0].memory_snapshot is not None,
                 "same_cases": {r.case_id for r in base[1]} == {r.case_id for r in cand[1]},
+                "mismatches": differing_axes(base[1], cand[1]),
                 "metric_rows": compare_rows(b, c),
                 "rows": rows,
             },

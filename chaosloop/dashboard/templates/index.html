@@ -7,15 +7,21 @@
 {% if runs %}
 <section class="card">
   <h2>Compare two runs</h2>
+  <p class="muted">Only runs with the same tier, split and golden version can be compared like for like; the candidate list follows the baseline.</p>
   <form class="compare-form" action="{{ url_for('compare_page') }}" method="get">
+    {% macro run_option(run) %}
+    <option value="{{ run.run_id }}"
+      data-tier="{{ run.tier }}" data-split="{{ run.split_label }}" data-golden="{{ run.golden_version }}"
+      data-label="{{ run.descriptor }} — {{ run.run_id }}">{{ run.descriptor }} — {{ run.run_id }}</option>
+    {% endmacro %}
     <label>Baseline
-      <select name="baseline">
-        {% for run in runs %}<option value="{{ run.run_id }}" {% if loop.index == 2 %}selected{% endif %}>{{ run.run_id }} ({{ run.split_label }}, memory {{ "on" if run.memory_snapshot else "off" }})</option>{% endfor %}
+      <select name="baseline" id="baseline">
+        {% for run in runs %}{{ run_option(run) }}{% endfor %}
       </select>
     </label>
     <label>Candidate
-      <select name="candidate">
-        {% for run in runs %}<option value="{{ run.run_id }}" {% if loop.first %}selected{% endif %}>{{ run.run_id }} ({{ run.split_label }}, memory {{ "on" if run.memory_snapshot else "off" }})</option>{% endfor %}
+      <select name="candidate" id="candidate">
+        {% for run in runs %}{{ run_option(run) }}{% endfor %}
       </select>
     </label>
     <button class="button" type="submit">Compare</button>
@@ -58,4 +64,35 @@
 {% else %}
 <div class="banner info"><span class="icon">i</span><span>No runs yet. Run <code>uv run chaosloop-eval run --split dev</code> and refresh.</span></div>
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+// Keep the candidate list to runs comparable with the chosen baseline (same tier, split and
+// golden version). Incomparable runs are disabled, not hidden, so you can still see they exist.
+(function () {
+  const baseline = document.getElementById("baseline");
+  const candidate = document.getElementById("candidate");
+  if (!baseline || !candidate) return;
+  const key = (o) => [o.dataset.tier, o.dataset.split, o.dataset.golden].join("|");
+  function sync() {
+    const base = baseline.selectedOptions[0];
+    if (!base) return;
+    const want = key(base);
+    let keepSelected = false;
+    for (const o of candidate.options) {
+      const ok = key(o) === want;
+      o.disabled = !ok;
+      o.textContent = o.dataset.label + (ok ? "" : "  · incomparable");
+      if (ok && o.selected) keepSelected = true;
+    }
+    if (!keepSelected) {
+      const enabled = Array.from(candidate.options).filter((o) => !o.disabled);
+      const pick = enabled.find((o) => o.value !== base.value) || enabled[0];
+      if (pick) pick.selected = true;
+    }
+  }
+  baseline.addEventListener("change", sync);
+  sync();
+})();
+</script>
 {% endblock %}
