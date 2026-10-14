@@ -307,3 +307,131 @@ def test_event_clearing_is_best_effort(tmp_path: Path):
     # The run completes and rolls back despite the delete being refused.
     record = controller.run(CATALOG.get("billing-missing-env-var"), "run-events-2")
     assert record.aborted is None and record.category_correct
+
+
+# --- Chaos Mesh residual-state cleanup -------------------------------------------------------
+
+def _pod_in_blast_radius(name: str, service: str) -> dict:
+    return {
+        "apiVersion": "v1", "kind": "Pod",
+        "metadata": {"name": name, "namespace": NS, "labels": {"app": service}},
+        "status": {"phase": "Running"},
+    }
+
+
+def test_chaos_experiment_restarts_blast_radius_pods_after_rollback(tmp_path: Path):
+    """A Chaos Mesh DNS or network injection can leak residual state (cached DNS answers,
+    half-open connections) after its CR is deleted; replacing the blast-radius pods closes
+    the gap so the next experiment's precheck is not corrupted."""
+    controller, cluster, _, _ = make(tmp_path)
+    cluster.add(_pod_in_blast_radius("checkout-frontend-a", "checkout-frontend"))
+    cluster.add(_pod_in_blast_radius("checkout-frontend-b", "checkout-frontend"))
+    cluster.add(_pod_in_blast_radius("unrelated-worker", "analytics-worker"))
+
+    # Simulate the frontend alert firing while a chaos experiment is live.
+    alerts_rules = controller.alerts.rules
+    alerts_rules["chaos"] = (
+        lambda c: c.get(ObjectRef("chaos-mesh.org/v1alpha1", "DNSChaos",
+                                  "chaosloop-dns-error", NS)) is not None,
+        {"alertname": "UpstreamErrors", "service": "checkout-frontend"},
+    )
+
+    controller.run(CATALOG.get("frontend-dns-resolution-failure"), "run-chaos-clean")
+
+    # Pods inside the blast radius are gone; the unrelated worker's pod is untouched.
+    remaining = {p["metadata"]["name"] for p in cluster.list("v1", "Pod", NS)}
+    assert "checkout-frontend-a" not in remaining
+    assert "checkout-frontend-b" not in remaining
+    assert "unrelated-worker" in remaining
+
+
+def test_config_experiment_does_not_restart_pods_because_it_leaves_no_residue(tmp_path: Path):
+    """A manifest-edit injection cannot leak the DNS / connection residue a chaos injector
+    does, so there is no reason to churn pods on top of the normal rollback."""
+    controller, cluster, _, _ = make(tmp_path)
+    cluster.add(_pod_in_blast_radius("billing-service-x", "billing-service"))
+    controller.run(CATALOG.get("billing-missing-env-var"), "run-config-clean")
+    remaining = {p["metadata"]["name"] for p in cluster.list("v1", "Pod", NS)}
+    assert "billing-service-x" in remaining
+
+
+def test_chaos_residual_cleanup_is_best_effort(tmp_path: Path):
+    """A denied pod delete must not abort the rollback - the run already completed."""
+    controller, cluster, _, _ = make(tmp_path)
+    cluster.add(_pod_in_blast_radius("checkout-frontend-a", "checkout-frontend"))
+    alerts_rules = controller.alerts.rules
+    alerts_rules["chaos"] = (
+        lambda c: c.get(ObjectRef("chaos-mesh.org/v1alpha1", "DNSChaos",
+                                  "chaosloop-dns-error", NS)) is not None,
+        {"alertname": "UpstreamErrors", "service": "checkout-frontend"},
+    )
+
+    real_delete = cluster.delete
+
+    def refuse_pod_deletes(ref):
+        if ref.kind == "Pod":
+            raise RuntimeError("forbidden: injector may not delete pods")
+        return real_delete(ref)
+
+    cluster.delete = refuse_pod_deletes  # type: ignore[method-assign]
+    record = controller.run(CATALOG.get("frontend-dns-resolution-failure"), "run-chaos-forbidden")
+    assert record.aborted is None  # rollback itself finished
+
+
+# --- Upstream error-rate steady state --------------------------------------------------------
+
+class StubUpstream:
+    def __init__(self, rates: dict[str, float]) -> None:
+        self.rates = rates
+        self.calls: list[tuple[str, list[str]]] = []
+
+    def error_rate(self, namespace: str, services: list[str]) -> dict[str, float]:
+        self.calls.append((namespace, list(services)))
+        return {svc: self.rates.get(svc, 0.0) for svc in services}
+
+
+def test_upstream_error_rate_flags_steady_state_when_pods_look_fine(tmp_path: Path):
+    """Chaos Mesh residue can leave pods Running and alerts quiet while the service is still
+    5xx-ing. The upstream probe is what catches that - without it, precheck would pass."""
+    upstream = StubUpstream({"checkout-frontend": 0.12})  # 12% errors > 5% default
+    controller, _, _, _ = make(tmp_path, upstream=upstream)
+    problems = controller.steady_state_problems(NS, ["checkout-frontend"])
+    assert any("12% error rate" in p for p in problems)
+
+
+def test_upstream_probe_within_threshold_is_steady(tmp_path: Path):
+    upstream = StubUpstream({"checkout-frontend": 0.01})
+    controller, _, _, _ = make(tmp_path, upstream=upstream)
+    assert controller.steady_state_problems(NS, ["checkout-frontend"]) == []
+
+
+def test_upstream_probe_missing_is_backward_compatible(tmp_path: Path):
+    """With no probe wired in, steady-state behaves exactly as before - this is what the
+    existing lifecycle tests rely on."""
+    controller, _, _, _ = make(tmp_path)  # no `upstream=` → None
+    assert controller.steady_state_problems(NS, ["billing-service"]) == []
+
+
+def test_upstream_probe_outage_does_not_fail_the_run(tmp_path: Path):
+    class Flaky:
+        def error_rate(self, namespace, services):
+            raise RuntimeError("prometheus down")
+
+    controller, _, _, _ = make(tmp_path, upstream=Flaky())
+    # A probe outage is logged and ignored; the normal checks still return steady.
+    assert controller.steady_state_problems(NS, ["billing-service"]) == []
+
+
+# --- Prompt stopping rule ---------------------------------------------------------------------
+
+def test_prompt_v5_names_dispositive_signals_for_each_network_category():
+    from chaosloop.agent.prompts import PROMPT_VERSION, SYSTEM_PROMPT
+
+    assert PROMPT_VERSION == "v5"
+    # Each of the three network-triad categories gets a named dispositive signal.
+    assert "dns_resolution_failure" in SYSTEM_PROMPT and "no such host" in SYSTEM_PROMPT
+    assert "network_partition" in SYSTEM_PROMPT and "endpoints are populated" in SYSTEM_PROMPT
+    assert "registry_auth_missing" in SYSTEM_PROMPT and "pull access denied" in SYSTEM_PROMPT
+    # The three-tool-call fallback preferring `unknown` over continuing is spelled out.
+    assert "three successive tool calls" in SYSTEM_PROMPT
+    assert "`unknown`" in SYSTEM_PROMPT

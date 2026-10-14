@@ -152,7 +152,7 @@ uv run chaosloop-lab catalog  # the experiments the planner may choose from
 uv run chaosloop-lab plan     # what it would run next, and why
 uv run chaosloop-lab run --plan 3                         # the oracle agent: no LLM spend
 uv run chaosloop-lab run --experiment cart-high-latency --param latency_ms=2500
-uv run chaosloop-lab run --plan 3 --agent model --samples 5    # the real agent
+uv run chaosloop-lab run --plan 3 --agent llm --samples 5      # the real agent
 ```
 
 What `lab-up` builds:

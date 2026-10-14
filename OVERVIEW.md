@@ -114,6 +114,8 @@ uv run chaosloop-eval report   eval/runs/<run>.jsonl        # summary of a past 
 uv run chaosloop-eval compare  eval/runs/<a>.jsonl eval/runs/<b>.jsonl   # A/B two runs (memory on vs off)
 
 uv run chaosloop-dashboard                                  # browse runs at http://127.0.0.1:8700
+
+uv run chaosloop-memory search "missing required configuration S3_BUCKET exiting with status 78"
 ```
 
 CI runs this tier two ways: a deterministic **mock-model** gate on every push/PR (validates the
@@ -140,7 +142,7 @@ uv run chaosloop-lab plan                        # what it would run next, and w
 # run experiments (each is: precheck, inject, watch, diagnose, verify-fix, roll back, cool down)
 uv run chaosloop-lab run --plan 3                                  # oracle: no LLM spend
 uv run chaosloop-lab run --experiment cart-high-latency --param latency_ms=2500
-uv run chaosloop-lab run --agent model --samples 5 --max-spend 5   # the real agent, hard $ cap
+uv run chaosloop-lab run --agent llm --samples 5 --max-spend 5     # the real agent, hard $ cap
 
 # flywheel: a run whose evidence is novel is queued as a candidate case for human review
 uv run chaosloop-review list

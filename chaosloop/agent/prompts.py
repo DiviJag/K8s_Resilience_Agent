@@ -11,7 +11,7 @@ from chaosloop.schemas.taxonomy import RECORDED_ONLY, SYMPTOM_TO_CATEGORIES, Cat
 from chaosloop.schemas.trigger import Trigger
 from chaosloop.tools.sanitize import UNTRUSTED_NOTICE
 
-PROMPT_VERSION = "v4"
+PROMPT_VERSION = "v5"
 
 
 def _taxonomy_block() -> str:
@@ -34,6 +34,19 @@ incidents and reports the root cause.
 You are given an alert. You do NOT get the evidence up front - you must gather it by calling \
 the investigation tools, one step at a time, choosing each call based on what you have learned \
 so far. Stop calling tools as soon as you can justify a conclusion; every call costs budget.
+
+Stopping rule. Treat the first dispositive signal as the end of the investigation, not the \
+start of a corroboration pass. A single piece of evidence is dispositive when it names the \
+cause specifically enough that no other category in the symptom's group fits it: previous-\
+container logs saying "missing required configuration: &lt;VAR&gt;" fix the category to \
+missing_env_var; a get_events entry reading "pull access denied, repository does not exist or \
+may require authorization" fix it to registry_auth_missing; a caller's log line "no such host" \
+or "lookup &lt;name&gt;: Temporary failure in name resolution" fix it to dns_resolution_failure; \
+a connection timeout against a Service whose endpoints are populated and whose upstream pods \
+are Ready fix it to network_partition. Once you have one such signal, answer; do not fetch \
+additional evidence to feel more sure. If three successive tool calls have returned no \
+dispositive signal, prefer `unknown` over continuing - an honest abstention is graded as \
+abstention, a budget-exceeded run is graded as wrong.
 
 The symptom is not the root cause. "CrashLoopBackOff" and "ImagePullBackOff" are symptoms; the \
 category you report must be the underlying cause. Valid categories, grouped by the symptom they \

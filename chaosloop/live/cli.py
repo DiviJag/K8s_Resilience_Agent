@@ -102,8 +102,8 @@ def plan(
 def run(
     experiment: Annotated[list[str] | None, typer.Option(help="Experiment id; repeatable")] = None,
     planned: Annotated[int, typer.Option("--plan", help="Let the planner pick N runs")] = 0,
-    agent: Annotated[str, typer.Option(help="oracle, or 'model' for the LLM agent")] = "oracle",
-    model: Annotated[str, typer.Option(help="OpenRouter model id for --agent model")] = "",
+    agent: Annotated[str, typer.Option(help="oracle, or 'llm' for the LLM agent")] = "oracle",
+    model: Annotated[str, typer.Option(help="OpenRouter model id for --agent llm")] = "",
     samples: int = 5,
     memory: Annotated[bool, typer.Option("--memory/--no-memory")] = False,
     repeats: int = 1,
@@ -114,6 +114,18 @@ def run(
     investigation_budget: Annotated[
         float, typer.Option(help="USD cap per investigation, resamples included")
     ] = 0.50,
+    prometheus_url: Annotated[
+        str,
+        typer.Option(
+            help=(
+                "Prometheus base URL for steady-state upstream-error-rate probing; empty disables"
+            ),
+        ),
+    ] = "",
+    upstream_error_rate_max: Annotated[
+        float,
+        typer.Option(help="Steady-state ceiling for observed upstream error rate (0-1)"),
+    ] = 0.05,
     catalog: Path = CATALOG_PATH,
     out_dir: Path = RUNS_DIR,
     golden_dir: Path = GOLDEN_DIR,
@@ -132,8 +144,11 @@ def run(
         status = "restored" if not problems else f"PROBLEMS: {problems}"
         typer.secho(f"found an experiment left behind ({run_key}): {status}", fg="yellow")
 
+    from chaosloop.live.lifecycle import LiveSettings
+    from chaosloop.live.monitoring import PrometheusProbe
     from chaosloop.tools.live_backend import LiveBackend
 
+    upstream = PrometheusProbe(base_url=prometheus_url) if prometheus_url else None
     controller = LifecycleController(
         gateway=gateway,
         alerts=AlertmanagerSource(),
@@ -143,6 +158,8 @@ def run(
         catalog_version=loaded.version,
         candidates=CandidateQueue(golden_dir),
         golden=load_golden_set(golden_dir),
+        settings=LiveSettings(upstream_error_rate_max=upstream_error_rate_max),
+        upstream=upstream,
         on_event=lambda message: typer.echo(f"  {datetime.now(UTC):%H:%M:%S} {message}"),
     )
 
@@ -155,7 +172,7 @@ def run(
     for resolved, params in queue:
         for repeat in range(1, repeats + 1):
             spent = sum(r.cost_usd or 0.0 for r in records)
-            if agent == "model" and spent + worst_case > max_spend:
+            if agent == "llm" and spent + worst_case > max_spend:
                 typer.secho(
                     f"\nstopping: ${spent:.2f} spent, and one more investigation could cost up "
                     f"to ${worst_case:.2f}, over the ${max_spend:.2f} limit",
@@ -178,7 +195,7 @@ def run(
             f"fix_success={_pct(live.fix_success_rate)} "
             f"ttd={_secs(live.mean_time_to_detect_s)} ttr={_secs(live.mean_time_to_recover_s)}"
         )
-    if agent == "model":
+    if agent == "llm":
         typer.echo(f"LLM spend this run: ${sum(r.cost_usd or 0.0 for r in records):.2f}")
     typer.echo(f"wrote {path}")
 
@@ -214,8 +231,8 @@ def _investigators(
 ) -> Any:
     if agent == "oracle":
         return OracleInvestigator
-    if agent != "model":
-        typer.secho("--agent must be oracle or model", fg="red")
+    if agent != "llm":
+        typer.secho("--agent must be oracle or llm", fg="red")
         raise typer.Exit(2)
     load_dotenv()
     from chaosloop.agent.diagnostician import Budget

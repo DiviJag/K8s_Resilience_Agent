@@ -29,7 +29,13 @@ from chaosloop.live.catalog import Experiment
 from chaosloop.live.fixer import FixOutcome, apply_fix
 from chaosloop.live.gateway import Gateway, ObjectRef
 from chaosloop.live.investigators import Investigator
-from chaosloop.live.monitoring import AlertSource, alert_problems, deployment_problems
+from chaosloop.live.monitoring import (
+    AlertSource,
+    UpstreamProbe,
+    alert_problems,
+    deployment_problems,
+    upstream_problems,
+)
 from chaosloop.live.mutator import InjectionError, Mutator
 from chaosloop.live.normalizer import group_alerts, trigger_for_group
 from chaosloop.recorder.recorder import Recorder
@@ -42,6 +48,10 @@ from chaosloop.tools.interface import ToolBackend
 class LiveSettings(BaseModel):
     poll_s: float = 5.0
     cooldown_timeout_s: float = 300.0
+    # Upstream error-rate ceiling for steady state. Pod availability alone cannot see a Chaos
+    # Mesh DNS or network injection that leaked residual state after rollback - the pods come
+    # back Ready but requests keep erroring. An error rate above this flags the lab as unsteady.
+    upstream_error_rate_max: float = 0.05
 
 
 class LifecycleController:
@@ -56,6 +66,7 @@ class LifecycleController:
         candidates: CandidateQueue | None = None,
         golden: list[GoldenCase] | None = None,
         settings: LiveSettings | None = None,
+        upstream: UpstreamProbe | None = None,
         clock: Callable[[], float] = time.time,
         sleep: Callable[[float], None] = time.sleep,
         on_event: Callable[[str], None] | None = None,
@@ -69,6 +80,7 @@ class LifecycleController:
         self.candidates = candidates
         self.golden = golden or []
         self.settings = settings or LiveSettings()
+        self.upstream = upstream
         self.clock = clock
         self.sleep = sleep
         self.on_event = on_event or (lambda message: None)
@@ -76,8 +88,12 @@ class LifecycleController:
     # --- steady state ---------------------------------------------------------------------
 
     def steady_state_problems(self, namespace: str, services: list[str] | None = None) -> list[str]:
-        return deployment_problems(self.gateway, namespace, services) + alert_problems(
-            self.alerts.firing(), namespace, services
+        return (
+            deployment_problems(self.gateway, namespace, services)
+            + alert_problems(self.alerts.firing(), namespace, services)
+            + upstream_problems(
+                self.upstream, namespace, services, self.settings.upstream_error_rate_max
+            )
         )
 
     def _wait_steady(
@@ -191,6 +207,18 @@ class LifecycleController:
             if rollback_problems:
                 record["error"] = f"rollback: {'; '.join(rollback_problems)}"
             self.on_event(f"{experiment.id}: rolled back")
+            # A Chaos Mesh injection can leak residual state after its CR is deleted - cached
+            # DNS answers in the caller's resolver, half-open connections, iptables rules the
+            # chaos-dns-server has not yet reconciled away. Pod availability does not catch any
+            # of that. Replacing the blast-radius pods forces fresh resolvers and new sockets,
+            # which closes the gap deterministically; config injections leave no such residue
+            # so we skip the extra churn there.
+            if experiment.injector == "chaos":
+                cleaned = self._chaos_residual_cleanup(experiment)
+                if cleaned:
+                    self.on_event(
+                        f"{experiment.id}: cleared {cleaned} residual pod(s) in blast radius"
+                    )
 
         _, still_wrong = self._wait_steady(experiment.namespace, self.settings.cooldown_timeout_s)
         if still_wrong:
@@ -331,3 +359,33 @@ class LifecycleController:
             if version:
                 return str(version).lstrip("v")
         return "unknown"
+
+    def _chaos_residual_cleanup(self, experiment: Experiment) -> int:
+        """Replace pods owned by any Deployment in the blast radius so cached DNS answers and
+        stuck connections from a Chaos Mesh injection cannot leak into the next experiment.
+
+        Best-effort: a missing pod or a deny from RBAC is not worth aborting the run over, so
+        every failure is swallowed. Returns the count of pods actually deleted."""
+        if not experiment.blast_radius:
+            return 0
+        wanted = set(experiment.blast_radius)
+        try:
+            pods = self.gateway.list("v1", "Pod", experiment.namespace)
+        except Exception:
+            return 0
+        deleted = 0
+        for pod in pods:
+            meta = pod.get("metadata") or {}
+            labels = meta.get("labels") or {}
+            # Pods are matched by the `app` label the lab's services share with their Deployment
+            # name; chaos-mesh-owned pods carry no such label and are skipped so we never kick
+            # the injector's own workers.
+            app = labels.get("app")
+            if app not in wanted:
+                continue
+            try:
+                self.gateway.delete(ObjectRef("v1", "Pod", meta["name"], experiment.namespace))
+                deleted += 1
+            except Exception:
+                continue
+        return deleted

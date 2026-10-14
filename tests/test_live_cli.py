@@ -131,7 +131,7 @@ def test_model_runs_stop_before_they_can_pass_the_spend_limit(tmp_path: Path, mo
     monkeypatch.setattr(live_backend, "LiveBackend", lambda **kwargs: None)
 
     ids = [e.id for e in load_catalog(CATALOG).plannable()][:10]
-    args = ["run", "--agent", "model", "--catalog", str(CATALOG), "--out-dir", str(tmp_path),
+    args = ["run", "--agent", "llm", "--catalog", str(CATALOG), "--out-dir", str(tmp_path),
             "--golden-dir", str(tmp_path / "golden"), "--max-spend", "5"]
     for experiment_id in ids:
         args += ["--experiment", experiment_id]
