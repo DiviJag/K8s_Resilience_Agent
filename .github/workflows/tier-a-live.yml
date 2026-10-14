@@ -23,7 +23,23 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync
+      # This gate calls a real, paid model, so it only runs where credentials are configured.
+      # Without them (e.g. a fork, or before the repo secret/variable is set) it skips green
+      # rather than failing the scheduled run - and never spends money unattended.
+      - name: Check credentials
+        id: creds
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          CHAOSLOOP_MODEL: ${{ vars.CHAOSLOOP_MODEL }}
+        run: |
+          if [ -n "$OPENROUTER_API_KEY" ] && [ -n "$CHAOSLOOP_MODEL" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping real-model eval: set the OPENROUTER_API_KEY secret and the CHAOSLOOP_MODEL repository variable to enable it."
+          fi
       - name: Tier A golden-set eval
+        if: steps.creds.outputs.ready == 'true'
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           CHAOSLOOP_MODEL: ${{ vars.CHAOSLOOP_MODEL }}
@@ -36,7 +52,7 @@ jobs:
           fi
           uv run chaosloop-eval run $args
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: steps.creds.outputs.ready == 'true'
         with:
           name: eval-run
           path: eval/runs/
