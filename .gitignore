@@ -20,3 +20,12 @@ lab/.journal/
 
 # Candidate cases await human review (chaosloop-review); like eval/runs, not source.
 golden/candidates/
+
+# archify-generated diagrams
+.archify/
+
+# brag launch-video outputs
+brag-output*/
+
+# codebase-to-course generated HTML tutorial
+course-chaosloop/
